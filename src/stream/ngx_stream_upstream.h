@@ -58,8 +58,8 @@ typedef struct {
     ngx_uint_t                         max_fails;
     time_t                             fail_timeout;
     ngx_msec_t                         slow_start;
+    ngx_uint_t                         down;
 
-    unsigned                           down:1;
     unsigned                           backup:1;
 
     NGX_COMPAT_BEGIN(4)
@@ -128,7 +128,12 @@ typedef struct {
 
     off_t                              received;
     time_t                             start_sec;
+    ngx_uint_t                         requests;
     ngx_uint_t                         responses;
+    ngx_msec_t                         start_time;
+
+    size_t                             upload_rate;
+    size_t                             download_rate;
 
     ngx_str_t                          ssl_name;
 

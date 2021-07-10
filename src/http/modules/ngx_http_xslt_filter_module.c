@@ -233,6 +233,7 @@ ngx_http_xslt_header_filter(ngx_http_request_t *r)
     ngx_http_set_ctx(r, ctx, ngx_http_xslt_filter_module);
 
     r->main_filter_need_in_memory = 1;
+    r->allow_ranges = 0;
 
     return NGX_OK;
 }
@@ -628,7 +629,7 @@ static ngx_int_t
 ngx_http_xslt_params(ngx_http_request_t *r, ngx_http_xslt_filter_ctx_t *ctx,
     ngx_array_t *params, ngx_uint_t final)
 {
-    u_char                 *p, *last, *value, *dst, *src, **s;
+    u_char                 *p, *value, *dst, *src, **s;
     size_t                  len;
     ngx_uint_t              i;
     ngx_str_t               string;
@@ -686,8 +687,17 @@ ngx_http_xslt_params(ngx_http_request_t *r, ngx_http_xslt_filter_ctx_t *ctx,
          * specified in xslt_stylesheet directives
          */
 
-        p = string.data;
-        last = string.data + string.len;
+        if (param[i].value.lengths) {
+            p = string.data;
+
+        } else {
+            p = ngx_pnalloc(r->pool, string.len + 1);
+            if (p == NULL) {
+                return NGX_ERROR;
+            }
+
+            ngx_memcpy(p, string.data, string.len + 1);
+        }
 
         while (p && *p) {
 
@@ -718,7 +728,7 @@ ngx_http_xslt_params(ngx_http_request_t *r, ngx_http_xslt_filter_ctx_t *ctx,
                 *p++ = '\0';
 
             } else {
-                len = last - value;
+                len = ngx_strlen(value);
             }
 
             ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,

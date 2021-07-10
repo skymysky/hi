@@ -31,6 +31,7 @@ struct ngx_shm_zone_s {
     ngx_shm_t                 shm;
     ngx_shm_zone_init_pt      init;
     void                     *tag;
+    void                     *sync;
     ngx_uint_t                noreuse;  /* unsigned  noreuse:1; */
 };
 
@@ -54,6 +55,7 @@ struct ngx_cycle_s {
 
     ngx_queue_t               reusable_connections_queue;
     ngx_uint_t                reusable_connections_n;
+    time_t                    connections_reuse_time;
 
     ngx_array_t               listening;
     ngx_array_t               paths;
@@ -78,6 +80,7 @@ struct ngx_cycle_s {
     ngx_str_t                 conf_param;
     ngx_str_t                 conf_prefix;
     ngx_str_t                 prefix;
+    ngx_str_t                 error_log;
     ngx_str_t                 lock_file;
     ngx_str_t                 hostname;
 };
@@ -114,6 +117,8 @@ typedef struct {
 
     ngx_array_t               env;
     char                    **environment;
+
+    ngx_uint_t                transparent;  /* unsigned  transparent:1; */
 } ngx_core_conf_t;
 
 

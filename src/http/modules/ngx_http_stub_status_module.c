@@ -76,7 +76,7 @@ static ngx_http_variable_t  ngx_http_stub_status_vars[] = {
     { ngx_string("connections_waiting"), NULL, ngx_http_stub_status_variable,
       3, NGX_HTTP_VAR_NOCACHEABLE, 0 },
 
-    { ngx_null_string, NULL, NULL, 0, 0, 0 }
+      ngx_http_null_variable
 };
 
 
@@ -102,16 +102,6 @@ ngx_http_stub_status_handler(ngx_http_request_t *r)
     r->headers_out.content_type_len = sizeof("text/plain") - 1;
     ngx_str_set(&r->headers_out.content_type, "text/plain");
     r->headers_out.content_type_lowcase = NULL;
-
-    if (r->method == NGX_HTTP_HEAD) {
-        r->headers_out.status = NGX_HTTP_OK;
-
-        rc = ngx_http_send_header(r);
-
-        if (rc == NGX_ERROR || rc > NGX_OK || r->header_only) {
-            return rc;
-        }
-    }
 
     size = sizeof("Active connections:  \n") + NGX_ATOMIC_T_LEN
            + sizeof("server accepts handled requests\n") - 1

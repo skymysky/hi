@@ -620,6 +620,7 @@ ngx_create_file_mapping(ngx_file_mapping_t *fm)
 {
     fm->fd = ngx_open_file(fm->name, NGX_FILE_RDWR, NGX_FILE_TRUNCATE,
                            NGX_FILE_DEFAULT_ACCESS);
+
     if (fm->fd == NGX_INVALID_FILE) {
         ngx_log_error(NGX_LOG_CRIT, fm->log, ngx_errno,
                       ngx_open_file_n " \"%s\" failed", fm->name);
@@ -874,7 +875,26 @@ ngx_fs_bsize(u_char *name)
         return 512;
     }
 
+#if (NGX_LINUX)
+    if ((size_t) fs.f_bsize > ngx_pagesize) {
+        return 512;
+    }
+#endif
+
     return (size_t) fs.f_bsize;
+}
+
+
+off_t
+ngx_fs_available(u_char *name)
+{
+    struct statfs  fs;
+
+    if (statfs((char *) name, &fs) == -1) {
+        return NGX_MAX_OFF_T_VALUE;
+    }
+
+    return (off_t) fs.f_bavail * fs.f_bsize;
 }
 
 #elif (NGX_HAVE_STATVFS)
@@ -892,7 +912,26 @@ ngx_fs_bsize(u_char *name)
         return 512;
     }
 
+#if (NGX_LINUX)
+    if ((size_t) fs.f_frsize > ngx_pagesize) {
+        return 512;
+    }
+#endif
+
     return (size_t) fs.f_frsize;
+}
+
+
+off_t
+ngx_fs_available(u_char *name)
+{
+    struct statvfs  fs;
+
+    if (statvfs((char *) name, &fs) == -1) {
+        return NGX_MAX_OFF_T_VALUE;
+    }
+
+    return (off_t) fs.f_bavail * fs.f_frsize;
 }
 
 #else
@@ -901,6 +940,13 @@ size_t
 ngx_fs_bsize(u_char *name)
 {
     return 512;
+}
+
+
+off_t
+ngx_fs_available(u_char *name)
+{
+    return NGX_MAX_OFF_T_VALUE;
 }
 
 #endif

@@ -104,6 +104,8 @@ $NGX_OBJS/nginx.8:	$NGX_MAN $NGX_AUTO_CONFIG_H
 		-e "s|%%ERROR_LOG_PATH%%|${NGX_ERROR_LOG_PATH:-stderr}|" \\
 		< $NGX_MAN > \$@
 
+DIRS=cpp python java lua temp doc leveldb qjs
+
 install:	build $NGX_INSTALL_PERL_MODULES
 	test -d '\$(DESTDIR)$NGX_PREFIX' || mkdir -p '\$(DESTDIR)$NGX_PREFIX'
 
@@ -157,10 +159,12 @@ install:	build $NGX_INSTALL_PERL_MODULES
 	test -d '\$(DESTDIR)$NGX_PREFIX/html' \\
 		|| cp -R $NGX_HTML '\$(DESTDIR)$NGX_PREFIX'
 
-	cp -R $NGX_ADDONS/include '\$(DESTDIR)$NGX_PREFIX/'
 
-	test -d '\$(DESTDIR)$NGX_PREFIX/hi' || mkdir -p '\$(DESTDIR)$NGX_PREFIX/hi'
-	cp auto/hi-project '\$(DESTDIR)$NGX_PREFIX/hi'
+	for i in \$(DIRS);do cp -R \$\$i '\$(DESTDIR)$NGX_PREFIX/';chmod -R a+w,a+r '\$(DESTDIR)$NGX_PREFIX/'\$\$i ;done
+	cp nginx.service /etc/systemd/system
+	cp -R module/ngx_http_hi_module/include '\$(DESTDIR)$NGX_PREFIX/'
+	cp auto/hi-project '\$(DESTDIR)`dirname "$NGX_SBIN_PATH"`'
+
 END
 
 
@@ -220,6 +224,8 @@ upgrade:
 	test -f $NGX_PID_PATH.oldbin
 
 	kill -QUIT \`cat $NGX_PID_PATH.oldbin\`
+
+.PHONY:	build install modules upgrade
 END
 
 
@@ -232,6 +238,7 @@ Description=The NGINX HTTP and reverse proxy server
 After=syslog.target network.target remote-fs.target nss-lookup.target
 
 [Service]
+WorkingDirectory=$NGX_PREFIX
 Type=forking
 PIDFile=$NGX_PID_PATH
 ExecStartPre=$NGX_SBIN_PATH -t

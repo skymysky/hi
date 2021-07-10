@@ -17,10 +17,11 @@
 #define NGX_INET6_ADDRSTRLEN                                                 \
     (sizeof("ffff:ffff:ffff:ffff:ffff:ffff:255.255.255.255") - 1)
 #define NGX_UNIX_ADDRSTRLEN                                                  \
-    (sizeof(struct sockaddr_un) - offsetof(struct sockaddr_un, sun_path))
+    (sizeof("unix:") - 1 +                                                   \
+     sizeof(struct sockaddr_un) - offsetof(struct sockaddr_un, sun_path))
 
 #if (NGX_HAVE_UNIX_DOMAIN)
-#define NGX_SOCKADDR_STRLEN   (sizeof("unix:") - 1 + NGX_UNIX_ADDRSTRLEN)
+#define NGX_SOCKADDR_STRLEN   NGX_UNIX_ADDRSTRLEN
 #elif (NGX_HAVE_INET6)
 #define NGX_SOCKADDR_STRLEN   (NGX_INET6_ADDRSTRLEN + sizeof("[]:65535") - 1)
 #else
@@ -85,6 +86,7 @@ typedef struct {
 
     in_port_t                 port;
     in_port_t                 default_port;
+    in_port_t                 last_port;
     int                       family;
 
     unsigned                  listen:1;
@@ -124,6 +126,7 @@ ngx_int_t ngx_cmp_sockaddr(struct sockaddr *sa1, socklen_t slen1,
     struct sockaddr *sa2, socklen_t slen2, ngx_uint_t cmp_port);
 in_port_t ngx_inet_get_port(struct sockaddr *sa);
 void ngx_inet_set_port(struct sockaddr *sa, in_port_t port);
+ngx_uint_t ngx_inet_wildcard(struct sockaddr *sa);
 
 
 #endif /* _NGX_INET_H_INCLUDED_ */

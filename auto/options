@@ -60,7 +60,6 @@ HTTP_GZIP=YES
 HTTP_SSL=NO
 HTTP_V2=NO
 HTTP_SSI=YES
-HTTP_POSTPONE=NO
 HTTP_REALIP=NO
 HTTP_XSLT=NO
 HTTP_IMAGE_FILTER=NO
@@ -70,6 +69,7 @@ HTTP_DAV=NO
 HTTP_ACCESS=YES
 HTTP_AUTH_BASIC=YES
 HTTP_AUTH_REQUEST=NO
+HTTP_MIRROR=YES
 HTTP_USERID=YES
 HTTP_SLICE=NO
 HTTP_AUTOINDEX=YES
@@ -85,6 +85,7 @@ HTTP_PROXY=YES
 HTTP_FASTCGI=YES
 HTTP_UWSGI=YES
 HTTP_SCGI=YES
+HTTP_GRPC=YES
 HTTP_PERL=NO
 HTTP_MEMCACHED=YES
 HTTP_LIMIT_CONN=YES
@@ -100,8 +101,19 @@ HTTP_GZIP_STATIC=NO
 HTTP_UPSTREAM_HASH=YES
 HTTP_UPSTREAM_IP_HASH=YES
 HTTP_UPSTREAM_LEAST_CONN=YES
+HTTP_UPSTREAM_RANDOM=YES
 HTTP_UPSTREAM_KEEPALIVE=YES
 HTTP_UPSTREAM_ZONE=YES
+
+
+HTTP_HI_CPP=YES
+HTTP_HI_PYTHON=NO
+HTTP_HI_LUA=NO
+HTTP_HI_JAVA=NO
+HTTP_HI_QJS=YES
+
+HTTP_HI_PYTHON_VERSION=python3
+HTTP_HI_LUA_VERSION=lua5.3
 
 # STUB
 HTTP_STUB_STATUS=NO
@@ -122,14 +134,18 @@ STREAM_GEOIP=NO
 STREAM_MAP=YES
 STREAM_SPLIT_CLIENTS=YES
 STREAM_RETURN=YES
+STREAM_SET=YES
 STREAM_UPSTREAM_HASH=YES
 STREAM_UPSTREAM_LEAST_CONN=YES
+STREAM_UPSTREAM_RANDOM=YES
 STREAM_UPSTREAM_ZONE=YES
 STREAM_SSL_PREREAD=NO
 
 DYNAMIC_MODULES=
+DYNAMIC_MODULES_SRCS=
 
 NGX_ADDONS=
+NGX_ADDON_SRCS=
 NGX_ADDON_DEPS=
 DYNAMIC_ADDONS=
 
@@ -249,6 +265,7 @@ $0: warning: the \"--with-ipv6\" option is deprecated"
         --without-http_userid_module)    HTTP_USERID=NO             ;;
         --without-http_access_module)    HTTP_ACCESS=NO             ;;
         --without-http_auth_basic_module) HTTP_AUTH_BASIC=NO        ;;
+        --without-http_mirror_module)    HTTP_MIRROR=NO             ;;
         --without-http_autoindex_module) HTTP_AUTOINDEX=NO          ;;
         --without-http_status_module)    HTTP_STATUS=NO             ;;
         --without-http_geo_module)       HTTP_GEO=NO                ;;
@@ -260,6 +277,7 @@ $0: warning: the \"--with-ipv6\" option is deprecated"
         --without-http_fastcgi_module)   HTTP_FASTCGI=NO            ;;
         --without-http_uwsgi_module)     HTTP_UWSGI=NO              ;;
         --without-http_scgi_module)      HTTP_SCGI=NO               ;;
+        --without-http_grpc_module)      HTTP_GRPC=NO               ;;
         --without-http_memcached_module) HTTP_MEMCACHED=NO          ;;
         --without-http_limit_conn_module) HTTP_LIMIT_CONN=NO        ;;
         --without-http_limit_req_module) HTTP_LIMIT_REQ=NO         ;;
@@ -269,6 +287,8 @@ $0: warning: the \"--with-ipv6\" option is deprecated"
         --without-http_upstream_ip_hash_module) HTTP_UPSTREAM_IP_HASH=NO ;;
         --without-http_upstream_least_conn_module)
                                          HTTP_UPSTREAM_LEAST_CONN=NO ;;
+        --without-http_upstream_random_module)
+                                         HTTP_UPSTREAM_RANDOM=NO    ;;
         --without-http_upstream_keepalive_module) HTTP_UPSTREAM_KEEPALIVE=NO ;;
         --without-http_upstream_zone_module) HTTP_UPSTREAM_ZONE=NO  ;;
 
@@ -317,10 +337,13 @@ use the \"--with-mail_ssl_module\" option instead"
         --without-stream_split_clients_module)
                                          STREAM_SPLIT_CLIENTS=NO    ;;
         --without-stream_return_module)  STREAM_RETURN=NO           ;;
+        --without-stream_set_module)     STREAM_SET=NO              ;;
         --without-stream_upstream_hash_module)
                                          STREAM_UPSTREAM_HASH=NO    ;;
         --without-stream_upstream_least_conn_module)
                                          STREAM_UPSTREAM_LEAST_CONN=NO ;;
+        --without-stream_upstream_random_module)
+                                         STREAM_UPSTREAM_RANDOM=NO  ;;
         --without-stream_upstream_zone_module)
                                          STREAM_UPSTREAM_ZONE=NO    ;;
 
@@ -385,6 +408,14 @@ $0: warning: the \"--with-sha1-asm\" option is deprecated"
         --test-build-eventport)          NGX_TEST_BUILD_EVENTPORT=YES ;;
         --test-build-epoll)              NGX_TEST_BUILD_EPOLL=YES   ;;
         --test-build-solaris-sendfilev)  NGX_TEST_BUILD_SOLARIS_SENDFILEV=YES ;;
+
+        --enable-http-hi-cpp=*)                 HTTP_HI_CPP="$value"                        ;;
+        --enable-http-hi-python=*)              HTTP_HI_PYTHON="$value"                     ;;
+        --enable-http-hi-qjs=*)                 HTTP_HI_QJS="$value"                        ;;
+        --enable-http-hi-lua=*)                 HTTP_HI_LUA="$value"                        ;;
+        --enable-http-hi-java=*)                HTTP_HI_JAVA="$value"                       ;;
+        --with-http-hi-python-version=*)        HTTP_HI_PYTHON_VERSION="$value"               ;;
+        --with-http-hi-lua-version=*)           HTTP_HI_LUA_VERSION="$value"                  ;;
 
         *)
             echo "$0: error: invalid option \"$option\""
@@ -458,6 +489,7 @@ cat << END
   --without-http_userid_module       disable ngx_http_userid_module
   --without-http_access_module       disable ngx_http_access_module
   --without-http_auth_basic_module   disable ngx_http_auth_basic_module
+  --without-http_mirror_module       disable ngx_http_mirror_module
   --without-http_autoindex_module    disable ngx_http_autoindex_module
   --without-http_geo_module          disable ngx_http_geo_module
   --without-http_map_module          disable ngx_http_map_module
@@ -468,6 +500,7 @@ cat << END
   --without-http_fastcgi_module      disable ngx_http_fastcgi_module
   --without-http_uwsgi_module        disable ngx_http_uwsgi_module
   --without-http_scgi_module         disable ngx_http_scgi_module
+  --without-http_grpc_module         disable ngx_http_grpc_module
   --without-http_memcached_module    disable ngx_http_memcached_module
   --without-http_limit_conn_module   disable ngx_http_limit_conn_module
   --without-http_limit_req_module    disable ngx_http_limit_req_module
@@ -479,6 +512,8 @@ cat << END
                                      disable ngx_http_upstream_ip_hash_module
   --without-http_upstream_least_conn_module
                                      disable ngx_http_upstream_least_conn_module
+  --without-http_upstream_random_module
+                                     disable ngx_http_upstream_random_module
   --without-http_upstream_keepalive_module
                                      disable ngx_http_upstream_keepalive_module
   --without-http_upstream_zone_module
@@ -525,10 +560,13 @@ cat << END
   --without-stream_split_clients_module
                                      disable ngx_stream_split_clients_module
   --without-stream_return_module     disable ngx_stream_return_module
+  --without-stream_set_module        disable ngx_stream_set_module
   --without-stream_upstream_hash_module
                                      disable ngx_stream_upstream_hash_module
   --without-stream_upstream_least_conn_module
                                      disable ngx_stream_upstream_least_conn_module
+  --without-stream_upstream_random_module
+                                     disable ngx_stream_upstream_random_module
   --without-stream_upstream_zone_module
                                      disable ngx_stream_upstream_zone_module
 
@@ -567,6 +605,14 @@ cat << END
   --with-openssl-opt=OPTIONS         set additional build options for OpenSSL
 
   --with-debug                       enable debug logging
+
+  --enable-http-hi-cpp=YES           enable hi cpp language support,YES or NO,default: YES
+  --enable-http-hi-python=NO         enable hi python language support,YES or NO,default: NO
+  --enable-http-hi-qjs=YES            enable hi qjs language support,YES or NO,default: YES
+  --enable-http-hi-lua=NO            enable hi lua language support,YES or NO,default: NO
+  --enable-http-hi-java=NO           enable hi java language support,YES or NO,default: NO
+  --with-http-hi-python-version      with python version,python2 or python3 ,default:python3
+  --with-http-hi-lua-versioin        with lua version,lua,lua5.1,lua5.2,lua5.3 or luajit ,default:lua5.3
 
 END
 
