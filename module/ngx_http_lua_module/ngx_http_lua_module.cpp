@@ -30,13 +30,13 @@ static ngx_command_t ngx_http_lua_commands[] = {
      NULL},
     {ngx_string("lua_package_search_path"),
      NGX_HTTP_LOC_CONF | NGX_HTTP_LIF_CONF | NGX_CONF_TAKE1,
-     ngx_conf_set_str_slot,
+     ngx_conf_set_str_array_slot,
      NGX_HTTP_LOC_CONF_OFFSET,
      offsetof(ngx_http_lua_loc_conf_t, package_search_path),
      NULL},
     {ngx_string("lua_cpackage_search_path"),
      NGX_HTTP_LOC_CONF | NGX_HTTP_LIF_CONF | NGX_CONF_TAKE1,
-     ngx_conf_set_str_slot,
+     ngx_conf_set_str_array_slot,
      NGX_HTTP_LOC_CONF_OFFSET,
      offsetof(ngx_http_lua_loc_conf_t, cpackage_search_path),
      NULL},
@@ -80,10 +80,8 @@ static void *ngx_http_lua_create_conf(ngx_conf_t *cf)
     if (conf)
     {
         conf->expires = NGX_CONF_UNSET;
-        conf->package_search_path.data = NULL;
-        conf->package_search_path.len = 0;
-        conf->cpackage_search_path.data = NULL;
-        conf->cpackage_search_path.len = 0;
+        conf->package_search_path = (ngx_array_t *)(NGX_CONF_UNSET_PTR);
+        conf->cpackage_search_path = (ngx_array_t *)(NGX_CONF_UNSET_PTR);
         conf->uri_pattern.data = NULL;
         conf->uri_pattern.len = 0;
         conf->memory_limit = NGX_CONF_UNSET;
@@ -130,7 +128,20 @@ static ngx_int_t ngx_http_lua_module_handler(ngx_http_request_t *r)
 
     if (lua_engine == nullptr)
     {
-        lua_engine = std::make_shared<hi::lua>(std::string((char *)conf->package_search_path.data, conf->package_search_path.len), std::string((char *)conf->cpackage_search_path.data, conf->cpackage_search_path.len), conf->memory_limit);
+        std::string psp;
+        ngx_str_t *ptr = (ngx_str_t *)conf->package_search_path->elts;
+        for (ngx_uint_t i = 0; i < conf->package_search_path->nelts; ++i)
+        {
+            psp.append(std::string((char *)ptr[i].data, ptr[i].len)).append(";");
+        }
+        std::string cpsp;
+        ptr = (ngx_str_t *)conf->cpackage_search_path->elts;
+        for (ngx_uint_t i = 0; i < conf->cpackage_search_path->nelts; ++i)
+        {
+            cpsp.append(std::string((char *)ptr[i].data, ptr[i].len)).append(";");
+        }
+
+        lua_engine = std::make_shared<hi::lua>(psp, cpsp, conf->memory_limit);
     }
 
     lua_engine->main(req, res);

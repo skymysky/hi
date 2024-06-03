@@ -17,8 +17,8 @@ static std::shared_ptr<hi::lua> lua_engine = nullptr;
 
 typedef struct
 {
-    ngx_str_t package_search_path;
-    ngx_str_t cpackage_search_path;
+    ngx_array_t *package_search_path;
+    ngx_array_t *cpackage_search_path;
     ngx_str_t uri_pattern;
     ngx_int_t expires;
     ngx_int_t memory_limit;

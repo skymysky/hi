@@ -30,13 +30,9 @@ namespace hi
                 .addFunction("has_header", &request::has_header)
                 .addFunction("has_cookie", &request::has_cookie)
                 .addFunction("has_form", &request::has_form)
-                .addFunction("has_cache", &request::has_cache)
-                .addFunction("has_session", &request::has_session)
                 .addFunction("get_header", &request::get_header)
                 .addFunction("get_cookie", &request::get_cookie)
-                .addFunction("get_form", &request::get_form)
-                .addFunction("get_session", &request::get_session)
-                .addFunction("get_cache", &request::get_cache));
+                .addFunction("get_form", &request::get_form));
         this->state["hi_response"].setClass(
             kaguya::UserdataMetatable<response>()
                 .setConstructors<response()>()
@@ -44,8 +40,7 @@ namespace hi
                 .addProperty("content", &response::content)
                 .addFunction("set_header", &response::set_header)
                 .addFunction("set_cookie", &response::set_cookie)
-                .addFunction("set_session", &response::set_session)
-                .addFunction("set_cache", &response::set_cache));
+                .addFunction("set_cookie_safe",&response::set_cookie_safe));
         this->state.setErrorHandler([&](int code, const char *msg)
                                     {
                                         if (this->cur_res)

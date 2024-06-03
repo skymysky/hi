@@ -17,7 +17,7 @@ static std::shared_ptr<hi::java> java_engine = nullptr;
 
 typedef struct
 {
-    ngx_str_t class_path;
+    ngx_array_t *class_path;
     ngx_str_t options;
     ngx_str_t servlet;
     ngx_str_t uri_pattern;

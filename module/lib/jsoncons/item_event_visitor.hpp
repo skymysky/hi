@@ -1,4 +1,4 @@
-// Copyright 2013-2023 Daniel Parker
+// Copyright 2013-2024 Daniel Parker
 // Distributed under the Boost license, Version 1.0.
 // (See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 
@@ -1417,7 +1417,15 @@ namespace jsoncons {
         {
             if (level_stack_.back().is_key() || level_stack_.back().target() == target_t::buffer)
             {
-                key_ = value ? true_constant : false_constant;
+                key_.clear(); 
+                if (value)
+                {
+                    key_.insert(key_.begin(), true_constant.begin(), true_constant.end());
+                }
+                else
+                {
+                    key_.insert(key_.begin(), false_constant.begin(), false_constant.end());
+                }
             }
 
             bool retval;
@@ -1465,7 +1473,8 @@ namespace jsoncons {
         {
             if (level_stack_.back().is_key() || level_stack_.back().target() == target_t::buffer)
             {
-                key_ = null_constant;
+                key_.clear(); 
+                key_.insert(key_.begin(), null_constant.begin(), null_constant.end());
             }
 
             bool retval;

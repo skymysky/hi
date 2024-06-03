@@ -30,7 +30,7 @@ static ngx_command_t ngx_http_cpp_commands[] = {
      NULL},
     {ngx_string("cpp_search_path"),
      NGX_HTTP_LOC_CONF | NGX_HTTP_LIF_CONF | NGX_CONF_TAKE1,
-     ngx_conf_set_str_slot,
+     ngx_conf_set_str_array_slot,
      NGX_HTTP_LOC_CONF_OFFSET,
      offsetof(ngx_http_cpp_loc_conf_t, search_path),
      NULL},
@@ -68,8 +68,7 @@ static void *ngx_http_cpp_create_conf(ngx_conf_t *cf)
     if (conf)
     {
         conf->expires = NGX_CONF_UNSET;
-        conf->search_path.data = NULL;
-        conf->search_path.len = 0;
+        conf->search_path = (ngx_array_t *)(NGX_CONF_UNSET_PTR);
         conf->uri_pattern.data = NULL;
         conf->uri_pattern.len = 0;
         return conf;
@@ -115,7 +114,13 @@ static ngx_int_t ngx_http_cpp_module_handler(ngx_http_request_t *r)
 
     if (cpp_engine == nullptr)
     {
-        cpp_engine = std::make_shared<hi::cpp>(std::string((char *)conf->search_path.data, conf->search_path.len));
+        std::vector<std::string> sp;
+        ngx_str_t *ptr = (ngx_str_t *)conf->search_path->elts;
+        for (ngx_uint_t i = 0; i < conf->search_path->nelts; ++i)
+        {
+            sp.push_back(std::string((char *)ptr[i].data, ptr[i].len));
+        }
+        cpp_engine = std::make_shared<hi::cpp>(sp);
     }
 
     cpp_engine->main(req, res);

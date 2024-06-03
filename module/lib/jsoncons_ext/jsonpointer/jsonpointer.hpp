@@ -1,4 +1,4 @@
-// Copyright 2013-2023 Daniel Parker
+// Copyright 2013-2024 Daniel Parker
 // Distributed under the Boost license, Version 1.0.
 // (See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 
@@ -27,7 +27,8 @@ namespace jsoncons { namespace jsonpointer {
     {
         start,
         escaped,
-        delim
+        new_token,
+        part
     };
 
     } // namespace detail
@@ -94,7 +95,7 @@ namespace jsoncons { namespace jsonpointer {
             auto jp = parse(s, ec);
             if (ec)
             {
-                throw jsonpointer_error(ec);
+                JSONCONS_THROW(jsonpointer_error(ec));
             }
             tokens_ = std::move(jp.tokens_);
         }
@@ -115,52 +116,44 @@ namespace jsoncons { namespace jsonpointer {
         static basic_json_pointer parse(const string_view_type& input, std::error_code& ec)
         {
             std::vector<string_type> tokens;
-            if (input.empty() || (input[0] == '#' && input.size() == 1))
+            if (input.empty())
             {
                 return basic_json_pointer<CharT>();
             }
 
-            const char_type* p;
-            const char_type* pend;
+            const char_type* p = input.data();
+            const char_type* pend = input.data() + input.size();
             string_type unescaped;
-            if (input[0] == '#') 
-            {
-                unescaped = unescape_uri_string(input, ec);
-                p = unescaped.data() + 1;
-                pend = unescaped.data() + unescaped.size();
-            }
-            else
-            {
-                p = input.data();
-                pend = input.data() + input.size();
-            }
 
             auto state = jsonpointer::detail::pointer_state::start;
             string_type buffer;
 
             while (p < pend)
             {
-                bool done = false;
-                while (p < pend && !done)
-                {
                     switch (state)
                     {
                         case jsonpointer::detail::pointer_state::start: 
                             switch (*p)
                             {
                                 case '/':
-                                    state = jsonpointer::detail::pointer_state::delim;
+                                    state = jsonpointer::detail::pointer_state::new_token;
                                     break;
                                 default:
                                     ec = jsonpointer_errc::expected_slash;
                                     return basic_json_pointer();
                             };
                             break;
-                        case jsonpointer::detail::pointer_state::delim: 
+                        case jsonpointer::detail::pointer_state::part:
+                            state = jsonpointer::detail::pointer_state::new_token; 
+                            JSONCONS_FALLTHROUGH;
+
+                        case jsonpointer::detail::pointer_state::new_token: 
                             switch (*p)
                             {
                                 case '/':
-                                    done = true;
+                                    tokens.push_back(buffer);
+                                    buffer.clear();
+                                    state = jsonpointer::detail::pointer_state::part; 
                                     break;
                                 case '~':
                                     state = jsonpointer::detail::pointer_state::escaped;
@@ -175,11 +168,11 @@ namespace jsoncons { namespace jsonpointer {
                             {
                                 case '0':
                                     buffer.push_back('~');
-                                    state = jsonpointer::detail::pointer_state::delim;
+                                    state = jsonpointer::detail::pointer_state::new_token;
                                     break;
                                 case '1':
                                     buffer.push_back('/');
-                                    state = jsonpointer::detail::pointer_state::delim;
+                                    state = jsonpointer::detail::pointer_state::new_token;
                                     break;
                                 default:
                                     ec = jsonpointer_errc::expected_0_or_1;
@@ -188,86 +181,17 @@ namespace jsoncons { namespace jsonpointer {
                             break;
                     }
                     ++p;
-                }
-                tokens.push_back(buffer);
-                buffer.clear();
             }
-            if (!buffer.empty())
+            if (state == jsonpointer::detail::pointer_state::escaped)
+            {
+                ec = jsonpointer_errc::expected_0_or_1;
+                return basic_json_pointer();
+            }
+            if (state == jsonpointer::detail::pointer_state::new_token || state == jsonpointer::detail::pointer_state::part)
             {
                 tokens.push_back(buffer);
             }
             return basic_json_pointer(tokens);
-        }
-
-        static string_type escape_uri_string(const string_type& s)
-        {
-            string_type escaped;
-            for (auto ch : s)
-            {
-                switch (ch)
-                {
-                    case '%':
-                        escaped.append(string_type{'%','2','5'});
-                        break;
-                    case '^':
-                        escaped.append(string_type{'%','5','E'});
-                        break;
-                    case '|':
-                        escaped.append(string_type{'%','7','C'});
-                        break;
-                    case '\\':
-                        escaped.append(string_type{'%','5','C'});
-                        break;
-                    case '\"':
-                        escaped.append(string_type{'%','2','2'});
-                        break;
-                    case ' ':
-                        escaped.append(string_type{'%','2','0'});
-                        break;
-                    default:
-                        escaped.push_back(ch);
-                        break;
-                }
-            }
-
-            return escaped;
-        }
-
-        static string_type unescape_uri_string(const string_view_type& s, std::error_code& ec)
-        {
-            if (s.size() < 3)
-            {
-                return string_type(s);
-            }
-            string_type unescaped;
-            std::size_t last = s.size() - 2;
-            std::size_t pos = 0;
-            while (pos < last)
-            {
-                if (s[pos] == '%')
-                {
-                    uint8_t ch;
-                    auto result = jsoncons::detail::to_integer_base16(s.data() + (pos+1), 2, ch);
-                    if (!result)
-                    {
-                        ec = jsonpointer_errc::invalid_uri_escaped_data;
-                        return string_type(s);
-                    }
-                    unescaped.push_back(ch);
-                    pos += 3;
-                }
-                else
-                {
-                    unescaped.push_back(s[pos]);
-                    ++pos;
-                }
-            }
-            while (pos < s.size())
-            {
-                unescaped.push_back(s[pos]);
-                ++pos;
-            }
-            return unescaped;
         }
 
         // operator=
@@ -280,6 +204,23 @@ namespace jsoncons { namespace jsonpointer {
         void clear()
         {
             tokens_.clear();
+        }
+
+        basic_json_pointer& append(const string_type& s) 
+        {
+            tokens_.push_back(s);
+            return *this;
+        }
+
+        template <class IntegerType>
+        typename std::enable_if<extension_traits::is_integer<IntegerType>::value, basic_json_pointer&>::type
+        append(IntegerType val)
+        {
+            string_type s;
+            jsoncons::detail::from_integer(val, s);
+            tokens_.push_back(s);
+
+            return *this;
         }
 
         basic_json_pointer& operator/=(const string_type& s) 
@@ -314,14 +255,11 @@ namespace jsoncons { namespace jsonpointer {
           return tokens_.empty();
         }
 
-#if !defined(JSONCONS_NO_DEPRECATED)
-
-        JSONCONS_DEPRECATED_MSG("Instead, use to_string()")
         string_type string() const
         {
             return to_string();
         }
-#endif
+
         string_type to_string() const
         {
             string_type buffer;
@@ -329,34 +267,6 @@ namespace jsoncons { namespace jsonpointer {
             {
                 buffer.push_back('/');
                 for (auto c : token)
-                {
-                    switch (c)
-                    {
-                        case '~':
-                            buffer.push_back('~');
-                            buffer.push_back('0');
-                            break;
-                        case '/':
-                            buffer.push_back('~');
-                            buffer.push_back('1');
-                            break;
-                        default:
-                            buffer.push_back(c);
-                            break;
-                    }
-                }
-            }
-            return buffer;
-        }
-
-        string_type to_uri_fragment() const
-        {
-            string_type buffer{'#'};
-            for (const auto& token : tokens_)
-            {
-                buffer.push_back('/');
-                string_type s = escape_uri_string(token);
-                for (auto c : s)
                 {
                     switch (c)
                     {
@@ -441,6 +351,18 @@ namespace jsoncons { namespace jsonpointer {
     using json_pointer = basic_json_pointer<char>;
     using wjson_pointer = basic_json_pointer<wchar_t>;
 
+    inline
+    std::string to_string(const json_pointer& ptr)
+    {
+        return ptr.to_string();
+    }
+
+    inline
+    std::wstring to_wstring(const wjson_pointer& ptr)
+    {
+        return ptr.to_string();
+    }
+
     #if !defined(JSONCONS_NO_DEPRECATED)
     template<class CharT>
     using basic_address = basic_json_pointer<CharT>;
@@ -448,7 +370,7 @@ namespace jsoncons { namespace jsonpointer {
     using basic_json_ptr = basic_json_pointer<CharT>;
     JSONCONS_DEPRECATED_MSG("Instead, use json_pointer") typedef json_pointer address;
     JSONCONS_DEPRECATED_MSG("Instead, use json_pointer") typedef json_pointer json_ptr;
-    JSONCONS_DEPRECATED_MSG("Instead, use wjson_pointer") typedef json_pointer wjson_ptr;
+    JSONCONS_DEPRECATED_MSG("Instead, use wjson_pointer") typedef wjson_pointer wjson_ptr;
     #endif
 
     namespace detail {

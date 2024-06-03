@@ -1,9 +1,11 @@
 #include <openssl/aes.h>
 #include <openssl/md5.h>
 #include <openssl/sha.h>
+#include <openssl/evp.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <syslog.h>
 
 #include <ctime>
 #include <fstream>
@@ -26,68 +28,79 @@
 
 namespace hi
 {
+    void syslog(const char *name, const char *msg)
+    {
+        openlog(name, LOG_CONS | LOG_PID, LOG_USER);
+        ::syslog(LOG_NOTICE, "SYSLOG:%s", msg);
+        closelog();
+    }
+
+    void syslog(const std::string &name, const std::string &msg)
+    {
+        syslog(name.c_str(), msg.c_str());
+    }
+
+    void split(const std::string &s, const std::string &delim, std::vector<std::string> &v)
+    {
+        size_t last = 0;
+        size_t index = s.find_first_of(delim, last);
+        std::string tmp;
+        while (index != std::string::npos)
+        {
+            tmp = std::move(s.substr(last, index - last));
+            if (!tmp.empty())
+            {
+                v.push_back(std::move(tmp));
+            }
+            last = index + delim.size();
+            index = s.find_first_of(delim, last);
+        }
+        if (index - last > 0)
+        {
+            tmp = std::move(s.substr(last, index - last));
+            if (!tmp.empty())
+            {
+                v.push_back(std::move(tmp));
+            }
+        }
+    }
+
+    std::string message_digest(const std::string &s, const EVP_MD *evp_md, size_t digest_length)
+    {
+        std::vector<unsigned char> md(digest_length, 0);
+        EVP_MD_CTX *ctx = EVP_MD_CTX_create();
+        EVP_MD_CTX_init(ctx);
+        EVP_DigestInit_ex(ctx, evp_md, NULL);
+        EVP_DigestUpdate(ctx, s.data(), s.size());
+        EVP_DigestFinal_ex(ctx, md.data(), NULL);
+        EVP_MD_CTX_destroy(ctx);
+
+        std::stringstream ss;
+        for (auto c : md)
+        {
+            ss << std::setfill('0') << std::setw(2) << std::hex << (unsigned int)c;
+        }
+        return ss.str();
+    }
 
     std::string md5(const std::string &str)
     {
-        unsigned char digest[MD5_DIGEST_LENGTH] = {0};
-        MD5_CTX ctx;
-        MD5_Init(&ctx);
-        MD5_Update(&ctx, str.c_str(), str.size());
-        MD5_Final(digest, &ctx);
-
-        unsigned char tmp[MD5_DIGEST_LENGTH * 2] = {0}, *dst = &tmp[0], *src = &digest[0];
-        unsigned char hex[] = "0123456789abcdef";
-        int len = MD5_DIGEST_LENGTH;
-        while (len--)
-        {
-
-            *dst++ = hex[*src >> 4];
-            *dst++ = hex[*src++ & 0xf];
-        }
-
-        return std::string((char *)tmp, MD5_DIGEST_LENGTH * 2);
+        return message_digest(str, EVP_md5(), MD5_DIGEST_LENGTH);
     }
 
     std::string sha1(const std::string &str)
     {
-        unsigned char digest[SHA_DIGEST_LENGTH] = {0};
-        SHA_CTX ctx;
-        SHA1_Init(&ctx);
-        SHA1_Update(&ctx, str.c_str(), str.size());
-        SHA1_Final(digest, &ctx);
-
-        unsigned char tmp[SHA_DIGEST_LENGTH * 2] = {0}, *dst = &tmp[0], *src = &digest[0];
-        unsigned char hex[] = "0123456789abcdef";
-        int len = SHA_DIGEST_LENGTH;
-        while (len--)
-        {
-
-            *dst++ = hex[*src >> 4];
-            *dst++ = hex[*src++ & 0xf];
-        }
-
-        return std::string((char *)tmp, SHA_DIGEST_LENGTH * 2);
+        return message_digest(str, EVP_sha1(), SHA_DIGEST_LENGTH);
     }
 
     std::string sha256(const std::string &str)
     {
-        unsigned char digest[SHA256_DIGEST_LENGTH] = {0};
-        SHA256_CTX ctx;
-        SHA256_Init(&ctx);
-        SHA256_Update(&ctx, str.c_str(), str.size());
-        SHA256_Final(digest, &ctx);
+        return message_digest(str, EVP_sha256(), SHA256_DIGEST_LENGTH);
+    }
 
-        unsigned char tmp[SHA256_DIGEST_LENGTH * 2] = {0}, *dst = &tmp[0], *src = &digest[0];
-        unsigned char hex[] = "0123456789abcdef";
-        int len = SHA256_DIGEST_LENGTH;
-        while (len--)
-        {
-
-            *dst++ = hex[*src >> 4];
-            *dst++ = hex[*src++ & 0xf];
-        }
-
-        return std::string((char *)tmp, SHA256_DIGEST_LENGTH * 2);
+    std::string sha512(const std::string &str)
+    {
+        return message_digest(str, EVP_sha512(), SHA512_DIGEST_LENGTH);
     }
 
     void split(const std::string &str, std::vector<std::string> &v, const char *delimiters)
@@ -487,7 +500,7 @@ namespace hi
         if (r->headers_in.cookie != NULL)
         {
             ngx_table_elt_t *cookies = (ngx_table_elt_t *)r->headers_in.cookie;
-            hi::parser_param(std::string((char *)cookies->value.data, cookies->value.len), req.cookies, ';');
+            hi::parser_param(std::string((char *)cookies->value.data, cookies->value.len), req.cookies);
         }
         return NGX_OK;
     }

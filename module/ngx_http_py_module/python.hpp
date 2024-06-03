@@ -16,7 +16,7 @@ namespace hi
 
         void main(const request &, response &);
 
-        void init(const std::string& search_path);
+        void init(const std::string &search_path);
 
     private:
         pybind11::scoped_interpreter guard;
@@ -24,4 +24,4 @@ namespace hi
         std::string error_message;
     };
 
-} // namespace anybyte
+} // namespace hi

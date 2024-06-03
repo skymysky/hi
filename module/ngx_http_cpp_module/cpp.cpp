@@ -44,8 +44,12 @@ namespace hi
     }
     */
     cpp::cpp() : path(), modules() {}
-    cpp::cpp(const std::string &path) : path(path), modules()
+    cpp::cpp(const std::vector<std::string> &p) : path(), modules()
     {
+        for (const auto &item : p)
+        {
+            this->path.push_back(item);
+        }
     }
     cpp::~cpp() {}
 
@@ -59,19 +63,27 @@ namespace hi
             std::string m_str;
             if (p != std::string::npos)
             {
-                m_str = std::move(this->path + req.uri.substr(0, p).append(".so"));
+                m_str = std::move(req.uri.substr(0, p));
             }
             else
             {
-                m_str = std::move(this->path + req.uri + ".so");
+                m_str = req.uri;
             }
 
-            std::shared_ptr<module<servlet>> cb = std::make_shared<module<servlet>>(m_str);
-
-            if (cb)
+            for (auto &item : this->path)
             {
-                cb->main(req, res);
-                this->modules[key] = std::move(cb);
+                std::string module_file = std::move(item + "/" + m_str + ".so");
+                if (is_file(module_file))
+                {
+                    std::shared_ptr<module<servlet>> cb = std::make_shared<module<servlet>>(module_file);
+
+                    if (cb)
+                    {
+                        cb->main(req, res);
+                        this->modules[key] = std::move(cb);
+                    }
+                    break;
+                }
             }
         }
         else

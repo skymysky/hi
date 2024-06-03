@@ -5,6 +5,7 @@
 #include <unordered_map>
 #include <memory>
 #include <string>
+#include <list>
 
 namespace hi
 {
@@ -12,12 +13,11 @@ namespace hi
     {
     public:
         cpp();
-        cpp(const std::string &path);
+        cpp(const std::vector<std::string> &path);
 
         virtual ~cpp();
 
         void main(const request &, response &);
-        void init(const std::string& path);
 
     private:
         /*class cb_t
@@ -41,7 +41,7 @@ namespace hi
             create_t *create;
             destroy_t *destroy;
         };*/
-        std::string path;
+        std::list<std::string> path;
         std::unordered_map<std::string, std::shared_ptr<module<servlet>>> modules;
     };
-} //namespace anybyte
+} // namespace anybyte

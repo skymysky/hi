@@ -1,4 +1,4 @@
-// Copyright 2013-2023 Daniel Parker
+// Copyright 2013-2024 Daniel Parker
 // Distributed under the Boost license, Version 1.0.
 // (See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 
@@ -85,34 +85,6 @@ enum class json_parse_state : uint8_t
     done
 };
 
-struct default_json_parsing
-{
-    bool operator()(json_errc ec, const ser_context&) noexcept 
-    {
-        if (ec == json_errc::illegal_comment)
-        {
-            return true; // Recover, allow comments
-        }
-        else
-        {
-            return false;
-        }
-    }
-};
-
-struct strict_json_parsing
-{
-    bool operator()(json_errc, const ser_context&) noexcept
-    {
-        return false;
-    }
-};
-
-#if !defined(JSONCONS_NO_DEPRECATED)
-JSONCONS_DEPRECATED_MSG("Instead, use default_json_parsing") typedef default_json_parsing default_parse_error_handler;
-JSONCONS_DEPRECATED_MSG("Instead, use strict_json_parsing") typedef strict_json_parsing strict_parse_error_handler;
-#endif
-
 template <class CharT, class TempAllocator = std::allocator<char>>
 class basic_json_parser : public ser_context
 {
@@ -166,26 +138,26 @@ private:
     basic_json_parser& operator=(const basic_json_parser&) = delete;
 
 public:
-    basic_json_parser(const TempAllocator& alloc = TempAllocator())
-        : basic_json_parser(basic_json_decode_options<char_type>(), default_json_parsing(), alloc)
+    basic_json_parser(const TempAllocator& temp_alloc = TempAllocator())
+        : basic_json_parser(basic_json_decode_options<char_type>(), default_json_parsing(), temp_alloc)
     {
     }
 
     basic_json_parser(std::function<bool(json_errc,const ser_context&)> err_handler, 
-                      const TempAllocator& alloc = TempAllocator())
-        : basic_json_parser(basic_json_decode_options<char_type>(), err_handler, alloc)
+                      const TempAllocator& temp_alloc = TempAllocator())
+        : basic_json_parser(basic_json_decode_options<char_type>(), err_handler, temp_alloc)
     {
     }
 
     basic_json_parser(const basic_json_decode_options<char_type>& options, 
-                      const TempAllocator& alloc = TempAllocator())
-        : basic_json_parser(options, default_json_parsing(), alloc)
+                      const TempAllocator& temp_alloc = TempAllocator())
+        : basic_json_parser(options, options.err_handler(), temp_alloc)
     {
     }
 
     basic_json_parser(const basic_json_decode_options<char_type>& options,
                       std::function<bool(json_errc,const ser_context&)> err_handler, 
-                      const TempAllocator& alloc = TempAllocator())
+                      const TempAllocator& temp_alloc = TempAllocator())
        : options_(options),
          err_handler_(err_handler),
          initial_stack_capacity_(default_initial_stack_capacity_),
@@ -202,8 +174,8 @@ public:
          state_(json_parse_state::start),
          more_(true),
          done_(false),
-         string_buffer_(alloc),
-         state_stack_(alloc)
+         string_buffer_(temp_alloc),
+         state_stack_(temp_alloc)
     {
         string_buffer_.reserve(initial_string_buffer_capacity_);
 

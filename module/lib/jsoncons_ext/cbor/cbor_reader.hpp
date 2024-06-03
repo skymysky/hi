@@ -1,4 +1,4 @@
-// Copyright 2013-2023 Daniel Parker
+// Copyright 2013-2024 Daniel Parker
 // Distributed under the Boost license, Version 1.0.
 // (See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 
@@ -33,7 +33,7 @@ public:
     template <class Sourceable>
     basic_cbor_reader(Sourceable&& source, 
                       json_visitor& visitor, 
-                      const Allocator alloc)
+                      const Allocator& alloc)
        : basic_cbor_reader(std::forward<Sourceable>(source),
                            visitor,
                            cbor_decode_options(),
@@ -45,7 +45,7 @@ public:
     basic_cbor_reader(Sourceable&& source, 
                       json_visitor& visitor, 
                       const cbor_decode_options& options = cbor_decode_options(),
-                      const Allocator alloc=Allocator())
+                      const Allocator& alloc=Allocator())
        : parser_(std::forward<Sourceable>(source), options, alloc),
          adaptor_(visitor, alloc), visitor_(adaptor_)
     {
@@ -53,7 +53,7 @@ public:
     template <class Sourceable>
     basic_cbor_reader(Sourceable&& source, 
                       item_event_visitor& visitor, 
-                      const Allocator alloc)
+                      const Allocator& alloc)
        : basic_cbor_reader(std::forward<Sourceable>(source),
                            visitor,
                            cbor_decode_options(),
@@ -65,7 +65,7 @@ public:
     basic_cbor_reader(Sourceable&& source, 
                       item_event_visitor& visitor, 
                       const cbor_decode_options& options = cbor_decode_options(),
-                      const Allocator alloc=Allocator())
+                      const Allocator& alloc=Allocator())
        : parser_(std::forward<Sourceable>(source), options, alloc),
          visitor_(visitor)
     {

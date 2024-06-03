@@ -1,4 +1,4 @@
-// Copyright 2013-2023 Daniel Parker
+// Copyright 2013-2024 Daniel Parker
 // Distributed under the Boost license, Version 1.0.
 // (See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 
@@ -40,7 +40,7 @@ namespace jsoncons { namespace csv {
         };
         using char_type = CharT;
         using temp_allocator_type = Allocator;
-        typedef typename std::allocator_traits<temp_allocator_type>:: template rebind_alloc<CharT> char_allocator_type;
+        using char_allocator_type = typename std::allocator_traits<temp_allocator_type>:: template rebind_alloc<CharT>;
 
         basic_csv_reader(const basic_csv_reader&) = delete; 
         basic_csv_reader& operator = (const basic_csv_reader&) = delete; 
@@ -183,7 +183,7 @@ namespace jsoncons { namespace csv {
         };
         using char_type = CharT;
         using temp_allocator_type = Allocator;
-        typedef typename std::allocator_traits<temp_allocator_type>:: template rebind_alloc<CharT> char_allocator_type;
+        using char_allocator_type = typename std::allocator_traits<temp_allocator_type>:: template rebind_alloc<CharT>;
 
         legacy_basic_csv_reader(const legacy_basic_csv_reader&) = delete; 
         legacy_basic_csv_reader& operator = (const legacy_basic_csv_reader&) = delete; 
@@ -333,15 +333,15 @@ namespace jsoncons { namespace csv {
         }
     };
 
-#if !defined(JSONCONS_NO_DEPRECATED)
-    using csv_reader = legacy_basic_csv_reader<char>;
-    using wcsv_reader = legacy_basic_csv_reader<wchar_t>;
-#endif
-
     using csv_string_reader = basic_csv_reader<char,string_source<char>>;
     using wcsv_string_reader = basic_csv_reader<wchar_t,string_source<wchar_t>>;
     using csv_stream_reader = basic_csv_reader<char,stream_source<char>>;
     using wcsv_stream_reader = basic_csv_reader<wchar_t,stream_source<wchar_t>>;
+
+#if !defined(JSONCONS_NO_DEPRECATED)
+    JSONCONS_DEPRECATED_MSG("Instead, use csv_string_reader or csv_stream_reader") typedef legacy_basic_csv_reader<char> csv_reader;
+    JSONCONS_DEPRECATED_MSG("Instead, use wcsv_string_reader or wcsv_stream_reader") typedef legacy_basic_csv_reader<wchar_t> wcsv_reader;
+#endif
 
 }}
 

@@ -1,4 +1,4 @@
-// Copyright 2013-2023 Daniel Parker
+// Copyright 2013-2024 Daniel Parker
 // Distributed under the Boost license, Version 1.0.
 // (See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 
@@ -10,8 +10,11 @@
 #include <string>
 #include <limits> // std::numeric_limits
 #include <cwchar>
+#include <functional>
 #include <jsoncons/json_exception.hpp>
+#include <jsoncons/json_error.hpp>
 #include <jsoncons/extension_traits.hpp>
+#include <jsoncons/ser_context.hpp>
 
 namespace jsoncons {
 
@@ -23,7 +26,7 @@ JSONCONS_DEPRECATED_MSG("Instead, use float_chars_format") typedef float_chars_f
 
 enum class indenting : uint8_t {no_indent = 0, indent = 1};
 
-enum class line_split_kind  : uint8_t {same_line,new_line,multi_line};
+enum class line_split_kind  : uint8_t {same_line=1, new_line, multi_line};
 
 enum class bigint_chars_format : uint8_t {number, base10, base64, base64url
 #if !defined(JSONCONS_NO_DEPRECATED)
@@ -39,6 +42,36 @@ JSONCONS_DEPRECATED_MSG("Instead, use bigint_chars_format") typedef bigint_chars
 enum class byte_string_chars_format : uint8_t {none=0,base16,base64,base64url};
 
 enum class spaces_option : uint8_t {no_spaces=0,space_after,space_before,space_before_and_after};
+
+
+struct default_json_parsing
+{
+    bool operator()(json_errc ec, const ser_context&) noexcept 
+    {
+        return ec == json_errc::illegal_comment;
+    }
+};
+
+struct strict_json_parsing
+{
+    bool operator()(json_errc, const ser_context&) noexcept
+    {
+        return false;
+    }
+};
+
+struct allow_trailing_commas
+{
+    bool operator()(const std::error_code& ec, const ser_context&) noexcept 
+    {
+        return ec == json_errc::illegal_comment || ec == jsoncons::json_errc::extra_comma;
+    }
+};
+
+#if !defined(JSONCONS_NO_DEPRECATED)
+JSONCONS_DEPRECATED_MSG("Instead, use default_json_parsing") typedef default_json_parsing default_parse_error_handler;
+JSONCONS_DEPRECATED_MSG("Instead, use strict_json_parsing") typedef strict_json_parsing strict_parse_error_handler;
+#endif
 
 template <class CharT>
 class basic_json_options;
@@ -103,7 +136,7 @@ protected:
     basic_json_options_common(const basic_json_options_common&) = default;
     basic_json_options_common& operator=(const basic_json_options_common&) = default;
     basic_json_options_common(basic_json_options_common&&) = default;
-    basic_json_options_common& operator=(basic_json_options_common&&) = default;
+    //basic_json_options_common& operator=(basic_json_options_common&&) = default;
 
 public:
 
@@ -324,26 +357,32 @@ public:
     using typename super_type::char_type;
     using typename super_type::string_type;
 private:
-    bool lossless_number_:1;
+    bool lossless_number_;
+    std::function<bool(json_errc,const ser_context&)> err_handler_;
 public:
     basic_json_decode_options()
-        : lossless_number_(false)
+        : lossless_number_(false), err_handler_(default_json_parsing())
     {
     }
 
     basic_json_decode_options(const basic_json_decode_options&) = default;
 
     basic_json_decode_options(basic_json_decode_options&& other)
-        : super_type(std::forward<basic_json_decode_options>(other)),
-                     lossless_number_(other.lossless_number_)
+        : super_type(std::move(other)), lossless_number_(other.lossless_number_), err_handler_(std::move(other.err_handler_))
     {
     }
-
+protected:
     basic_json_decode_options& operator=(const basic_json_decode_options&) = default;
-
+    basic_json_decode_options& operator=(basic_json_decode_options&&) = default;
+public:
     bool lossless_number() const 
     {
         return lossless_number_;
+    }
+
+    const std::function<bool(json_errc,const ser_context&)>& err_handler() const 
+    {
+        return err_handler_;
     }
 
 #if !defined(JSONCONS_NO_DEPRECATED)
@@ -374,6 +413,7 @@ private:
     float_chars_format float_format_;
     byte_string_chars_format byte_string_format_;
     bigint_chars_format bigint_format_;
+    line_split_kind line_splits_;
     line_split_kind object_object_line_splits_;
     line_split_kind object_array_line_splits_;
     line_split_kind array_array_line_splits_;
@@ -393,10 +433,11 @@ public:
           float_format_(float_chars_format::general),
           byte_string_format_(byte_string_chars_format::none),
           bigint_format_(bigint_chars_format::base10),
-          object_object_line_splits_(line_split_kind::multi_line),
-          object_array_line_splits_(line_split_kind::same_line),
-          array_array_line_splits_(line_split_kind::new_line),
-          array_object_line_splits_(line_split_kind::multi_line),
+          line_splits_(line_split_kind::multi_line),
+          object_object_line_splits_(line_split_kind{}),
+          object_array_line_splits_(line_split_kind{}),
+          array_array_line_splits_(line_split_kind{}),
+          array_object_line_splits_(line_split_kind{}),
           spaces_around_colon_(spaces_option::space_after),
           spaces_around_comma_(spaces_option::space_after),
           precision_(0),
@@ -409,7 +450,7 @@ public:
     basic_json_encode_options(const basic_json_encode_options&) = default;
 
     basic_json_encode_options(basic_json_encode_options&& other)
-        : super_type(std::forward<basic_json_encode_options>(other)),
+        : super_type(std::move(other)),
           escape_all_non_ascii_(other.escape_all_non_ascii_),
           escape_solidus_(other.escape_solidus_),
           pad_inside_object_braces_(other.pad_inside_object_braces_),
@@ -417,6 +458,7 @@ public:
           float_format_(other.float_format_),
           byte_string_format_(other.byte_string_format_),
           bigint_format_(other.bigint_format_),
+          line_splits_(other.line_splits_),
           object_object_line_splits_(other.object_object_line_splits_),
           object_array_line_splits_(other.object_array_line_splits_),
           array_array_line_splits_(other.array_array_line_splits_),
@@ -429,20 +471,23 @@ public:
           new_line_chars_(std::move(other.new_line_chars_))
     {
     }
-
+protected:
     basic_json_encode_options& operator=(const basic_json_encode_options&) = default;
-
+    basic_json_encode_options& operator=(basic_json_encode_options&&) = default;
+public:
     byte_string_chars_format byte_string_format() const  {return byte_string_format_;}
 
     bigint_chars_format bigint_format() const  {return bigint_format_;}
 
-    line_split_kind object_object_line_splits() const  {return object_object_line_splits_;}
+    line_split_kind line_splits() const  {return line_splits_;}
 
-    line_split_kind array_object_line_splits() const  {return array_object_line_splits_;}
+    line_split_kind object_object_line_splits() const  {return object_object_line_splits_ == line_split_kind{} ? line_splits_ : object_object_line_splits_;}
 
-    line_split_kind object_array_line_splits() const  {return object_array_line_splits_;}
+    line_split_kind array_object_line_splits() const  {return array_object_line_splits_ == line_split_kind{} ? line_splits_ : array_object_line_splits_;}
 
-    line_split_kind array_array_line_splits() const  {return array_array_line_splits_;}
+    line_split_kind object_array_line_splits() const  {return object_array_line_splits_ == line_split_kind{} ? line_splits_ : object_array_line_splits_;}
+
+    line_split_kind array_array_line_splits() const  {return array_array_line_splits_ == line_split_kind{} ? line_splits_ : array_array_line_splits_;}
 
     uint8_t indent_size() const 
     {
@@ -544,9 +589,11 @@ public:
     using basic_json_decode_options<CharT>::neginf_to_num;
 
     using basic_json_decode_options<CharT>::lossless_number;
+    using basic_json_decode_options<CharT>::err_handler;
 
     using basic_json_encode_options<CharT>::byte_string_format;
     using basic_json_encode_options<CharT>::bigint_format;
+    using basic_json_encode_options<CharT>::line_splits;
     using basic_json_encode_options<CharT>::object_object_line_splits;
     using basic_json_encode_options<CharT>::array_object_line_splits;
     using basic_json_encode_options<CharT>::object_array_line_splits;
@@ -675,6 +722,8 @@ public:
 
     basic_json_options&  bigint_format(bigint_chars_format value) {this->bigint_format_ = value; return *this;}
 
+    basic_json_options& line_splits(line_split_kind value) {this->line_splits_ = value; return *this;}
+
     basic_json_options& object_object_line_splits(line_split_kind value) {this->object_object_line_splits_ = value; return *this;}
 
     basic_json_options& array_object_line_splits(line_split_kind value) {this->array_object_line_splits_ = value; return *this;}
@@ -722,6 +771,12 @@ public:
     basic_json_options& lossless_number(bool value) 
     {
         this->lossless_number_ = value;
+        return *this;
+    }
+
+    basic_json_options& err_handler(const std::function<bool(json_errc,const ser_context&)>& value) 
+    {
+        this->err_handler_ = value;
         return *this;
     }
 

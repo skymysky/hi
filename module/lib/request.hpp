@@ -10,7 +10,7 @@ namespace hi
     {
     public:
         request()
-            : client(), user_agent(), method(), uri(), param(), headers(), form(), cookies(), session(), cache()
+            : client(), user_agent(), method(), uri(), param(), headers(), form(), cookies()
         {
         }
         virtual ~request() = default;
@@ -44,26 +44,7 @@ namespace hi
             return this->cookies.at(key);
         }
 
-        bool has_session(const std::string &key) const
-        {
-            return this->session.find(key) != this->session.end();
-        }
-
-        const std::string &get_session(const std::string &key) const
-        {
-            return this->session.at(key);
-        }
-
-        bool has_cache(const std::string &key) const
-        {
-            return this->cache.find(key) != this->cache.end();
-        }
-
-        const std::string &get_cache(const std::string &key) const
-        {
-            return this->cache.at(key);
-        }
         std::string client, user_agent, method, uri, param;
-        std::unordered_map<std::string, std::string> headers, form, cookies, session, cache;
+        std::unordered_map<std::string, std::string> headers, form, cookies;
     };
 } // namespace hi

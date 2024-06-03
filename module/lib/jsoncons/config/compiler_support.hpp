@@ -1,4 +1,4 @@
-// Copyright 2013-2023 Daniel Parker
+// Copyright 2013-2024 Daniel Parker
 // Distributed under the Boost license, Version 1.0.
 // (See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 
@@ -24,7 +24,8 @@
 // MIT license
 
 // https://gcc.gnu.org/bugzilla/show_bug.cgi?id=54577
-#if defined(__GNUC__) && __GNUC__ == 4 && __GNUC_MINOR__ < 9
+#if defined(__clang__) 
+#elif defined(__GNUC__) && (__GNUC__ == 4 && __GNUC_MINOR__ < 9)
 #define JSONCONS_NO_VECTOR_ERASE_TAKES_CONST_ITERATOR 1
 #define JSONCONS_NO_MAP_CONS_TAKES_ALLOCATOR 1
 #endif
@@ -146,6 +147,14 @@
     #define JSONCONS_IF_CONSTEXPR if 
 #endif
 
+#if !defined(JSONCONS_HAS_POLYMORPHIC_ALLOCATOR)
+#if defined(JSONCONS_HAS_2017)
+#      if __has_include(<memory_resource>)
+#        define JSONCONS_HAS_POLYMORPHIC_ALLOCATOR 1
+#     endif // __has_include(<string_view>)
+#endif
+#endif
+
 #if !defined(JSONCONS_HAS_STD_STRING_VIEW)
 #  if (defined JSONCONS_HAS_2017)
 #    if defined(__clang__)
@@ -213,9 +222,9 @@
 
 #if !defined(JSONCONS_NO_EXCEPTIONS)
 
-#if defined(__GNUC__) && !__EXCEPTIONS
+#if defined(__GNUC__) && !defined(__EXCEPTIONS)
 # define JSONCONS_NO_EXCEPTIONS 1
-#elif _MSC_VER
+#elif defined(_MSC_VER)
 #if defined(_HAS_EXCEPTIONS) && _HAS_EXCEPTIONS == 0
 # define JSONCONS_NO_EXCEPTIONS 1
 #elif !defined(_CPPUNWIND)
@@ -340,6 +349,27 @@ namespace jsoncons {
 #define JSONCONS_CONSTEXPR
 #else
 #define JSONCONS_CONSTEXPR constexpr
+#endif
+
+#if !defined(JSONCONS_HAS_STD_REGEX)
+#if defined(__clang__) 
+#define JSONCONS_HAS_STD_REGEX 1
+#elif (defined(__GNUC__) && (__GNUC__ == 4)) && (defined(__GNUC__) && __GNUC_MINOR__ < 9)
+// GCC 4.8 has broken regex support: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=53631
+#else
+#define JSONCONS_HAS_STD_REGEX 1
+#endif
+#endif
+
+#if !defined(JSONCONS_HAS_STATEFUL_ALLOCATOR)
+#if defined(__clang__) 
+#define JSONCONS_HAS_STATEFUL_ALLOCATOR 1
+#elif (defined(__GNUC__) && (__GNUC__ == 4)) && (defined(__GNUC__) && __GNUC_MINOR__ < 9)
+// gcc 4.8 basic_string doesn't satisfy C++11 allocator requirements
+// and gcc doesn't support allocators with no default constructor
+#else
+#define JSONCONS_HAS_STATEFUL_ALLOCATOR 1
+#endif
 #endif
 
 namespace jsoncons {

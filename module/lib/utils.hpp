@@ -22,7 +22,12 @@ extern "C"
 
 namespace hi
 {
-
+    void syslog(const char *name, const char *msg);
+    void syslog(const std::string &name, const std::string &msg);
+    void split(const std::string &s, const std::string &delim, std::vector<std::string> &v);
+    
+    std::string message_digest(const std::string& s, const EVP_MD* evp_md,size_t digest_length);
+    
     std::string md5(const std::string &str);
 
     std::string sha1(const std::string &str);

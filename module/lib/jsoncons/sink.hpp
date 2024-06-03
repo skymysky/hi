@@ -1,4 +1,4 @@
-// Copyright 2013-2023 Daniel Parker
+// Copyright 2013-2024 Daniel Parker
 // Distributed under the Boost license, Version 1.0.
 // (See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 
@@ -211,10 +211,10 @@ namespace jsoncons {
         string_sink(const string_sink&) = delete;
         string_sink& operator=(const string_sink&) = delete;
     public:
-        string_sink(string_sink&& val) noexcept
+        string_sink(string_sink&& other) noexcept
             : buf_ptr(nullptr)
         {
-            std::swap(buf_ptr,val.buf_ptr);
+            std::swap(buf_ptr,other.buf_ptr);
         }
 
         string_sink(container_type& buf)
@@ -222,11 +222,11 @@ namespace jsoncons {
         {
         }
 
-        string_sink& operator=(string_sink&& val) noexcept
+        string_sink& operator=(string_sink&& other) noexcept
         {
-            // TODO: Shouldn't val.buf_ptr be nullified?
+            // TODO: Shouldn't other.buf_ptr be nullified?
             //       Also see move constructor above.
-            std::swap(buf_ptr,val.buf_ptr);
+            std::swap(buf_ptr,other.buf_ptr);
             return *this;
         }
 

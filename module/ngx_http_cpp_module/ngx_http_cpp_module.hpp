@@ -1,7 +1,4 @@
-#pragma once 
-
-
-
+#pragma once
 
 extern "C"
 {
@@ -20,7 +17,7 @@ static std::shared_ptr<hi::cpp> cpp_engine = nullptr;
 
 typedef struct
 {
-    ngx_str_t search_path;
+    ngx_array_t *search_path;
     ngx_str_t uri_pattern;
     ngx_int_t expires;
 } ngx_http_cpp_loc_conf_t;

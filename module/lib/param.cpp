@@ -1,6 +1,7 @@
 #include "param.hpp"
 
 #include <string>
+#include <regex>
 #include <unordered_map>
 
 namespace hi
@@ -21,32 +22,16 @@ namespace hi
         return std::string(it, rit.base());
     }
 
-    void parser_param(const std::string &data, std::unordered_map<std::string, std::string> &result, char c, char cc)
+    void parser_param(const std::string &data, std::unordered_map<std::string, std::string> &result)
     {
         if (data.empty())
             return;
-        size_t start = 0, p, q;
-        while (true)
+        std::string str = data;
+        std::regex re(R"(([^;&?:\s\/\\]+)=([^;&?]{0,}))");
+        for (std::smatch sm; std::regex_search(str, sm, re);)
         {
-            p = data.find(c, start);
-            if (p == std::string::npos)
-            {
-                q = data.find(cc, start);
-                if (q != std::string::npos)
-                {
-                    result[trim(data.substr(start, q - start))] = std::move(trim(data.substr(q + 1)));
-                }
-                break;
-            }
-            else
-            {
-                q = data.find(cc, start);
-                if (q != std::string::npos)
-                {
-                    result[trim(data.substr(start, q - start))] = std::move(trim(data.substr(q + 1, p - q - 1)));
-                }
-                start = p + 1;
-            }
+            result[std::move(trim(sm[1]))] = std::move(trim(sm[2]));
+            str = sm.suffix();
         }
     }
 } // namespace hi

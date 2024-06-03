@@ -1,4 +1,4 @@
-// Copyright 2013-2023 Daniel Parker
+// Copyright 2013-2024 Daniel Parker
 // Distributed under the Boost license, Version 1.0.
 // (See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 
@@ -156,8 +156,6 @@ namespace jsoncons {
 
         void next(std::error_code& ec)
         {
-            using char_type = typename Json::char_type;
-
             if (!done())
             {
                 view_->cursor_->next(ec);
@@ -321,8 +319,6 @@ namespace jsoncons {
 
         void next(std::error_code& ec)
         {
-            using char_type = typename Json::char_type;
-
             view_->cursor_->next(ec);
             if (ec)
             {

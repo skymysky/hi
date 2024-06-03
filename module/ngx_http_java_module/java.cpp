@@ -4,7 +4,12 @@ namespace hi
 {
 
     java::java(const std::string &classpath, const std::string &option, int version, const std::string &servlet)
-        : jvm(0), args(), options(0), ok(false), inited(false), servlet(), env(0), version(11), request(0), response(0), hashmap(0), arraylist(0), iterator(0), set(0), request_ctor(0), response_ctor(0), hashmap_put(0), hashmap_get(0), hashmap_keyset(0), arraylist_get(0), arraylist_size(0), arraylist_iterator(0), hasnext(0), next(0), set_iterator(0), status(0), content(0), client(0), user_agent(0), method(0), uri(0), param(0), req_headers(0), form(0), cookies(0), req_session(0), req_cache(0), res_headers(0), res_session(0), res_cache(0)
+        : jvm(0), args(), options(0), ok(false), inited(false),
+          servlet(), env(0), version(11), request(0), response(0), hashmap(0),
+          arraylist(0), iterator(0), set(0), request_ctor(0), response_ctor(0),
+          hashmap_put(0), hashmap_get(0), hashmap_keyset(0), arraylist_get(0), arraylist_size(0),
+          arraylist_iterator(0), hasnext(0), next(0), set_iterator(0), status(0), content(0),
+          client(0), user_agent(0), method(0), uri(0), param(0), req_headers(0), form(0), cookies(0), res_headers(0)
     {
         this->init(classpath, option, version, servlet);
     }
@@ -47,11 +52,7 @@ namespace hi
         this->req_headers = 0;
         this->form = 0;
         this->cookies = 0;
-        this->req_session = 0;
-        this->req_cache = 0;
         this->res_headers = 0;
-        this->res_session = 0;
-        this->res_cache = 0;
     }
 
     void java::init(const std::string &classpath, const std::string &option, int version, const std::string &servlet)
@@ -110,10 +111,8 @@ namespace hi
             break;
         }
         std::vector<std::string> opt_vec;
-        // this->split(classpath, opt_vec, " ");
-        // this->split(jvmoptions, opt_vec, " ");
-        split(classpath, std::ref(opt_vec), " ");
-        split(jvmoptions, std::ref(opt_vec), " ");
+        hi::split(classpath, " ", std::ref(opt_vec));
+        hi::split(jvmoptions, " ", std::ref(opt_vec));
         this->args.nOptions = opt_vec.size();
         this->options = (JavaVMOption *)calloc(sizeof(JavaVMOption), this->args.nOptions);
         if (this->options == NULL)
@@ -128,17 +127,6 @@ namespace hi
         this->args.ignoreUnrecognized = JNI_TRUE;
         int rv = JNI_CreateJavaVM(&this->jvm, (void **)&this->env, &this->args);
         return (rv < 0 || !this->env) ? false : true;
-    }
-    void java::split(const std::string &str, std::vector<std::string> &v, const char *delimiters)
-    {
-        char tmp[str.size()];
-        strcpy(tmp, str.data());
-        char *p = strtok(tmp, delimiters);
-        while (p)
-        {
-            v.push_back(p);
-            p = strtok(NULL, delimiters);
-        }
     }
     void java::free_vm()
     {
@@ -159,8 +147,6 @@ namespace hi
             this->req_headers = this->env->GetFieldID(this->request, "headers", "Ljava/util/HashMap;");
             this->form = this->env->GetFieldID(this->request, "form", "Ljava/util/HashMap;");
             this->cookies = this->env->GetFieldID(this->request, "cookies", "Ljava/util/HashMap;");
-            this->req_session = this->env->GetFieldID(this->request, "session", "Ljava/util/HashMap;");
-            this->req_cache = this->env->GetFieldID(this->request, "cache", "Ljava/util/HashMap;");
 
             this->response = this->env->FindClass("hi/response");
             if (this->response != NULL)
@@ -169,8 +155,6 @@ namespace hi
                 this->status = this->env->GetFieldID(this->response, "status", "I");
                 this->content = this->env->GetFieldID(this->response, "content", "Ljava/lang/String;");
                 this->res_headers = this->env->GetFieldID(this->response, "headers", "Ljava/util/HashMap;");
-                this->res_session = this->env->GetFieldID(this->response, "session", "Ljava/util/HashMap;");
-                this->res_cache = this->env->GetFieldID(this->response, "cache", "Ljava/util/HashMap;");
 
                 this->hashmap = this->env->FindClass("java/util/HashMap");
                 this->hashmap_put = this->env->GetMethodID(this->hashmap, "put", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;");
@@ -337,6 +321,14 @@ namespace hi
 
             this->env->DeleteLocalRef(request_instance);
             this->env->DeleteLocalRef(response_instance);
+        }
+        else if (!this->ok)
+        {
+            hi::syslog("hi-nginx-java", "jvm create failed.");
+        }
+        else if (!this->inited)
+        {
+            hi::syslog("hi-nginx-java", "jvm init failed.");
         }
     }
 

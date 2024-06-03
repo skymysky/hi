@@ -30,7 +30,7 @@ static ngx_command_t ngx_http_java_commands[] = {
      NULL},
     {ngx_string("java_class_path"),
      NGX_HTTP_LOC_CONF | NGX_HTTP_LIF_CONF | NGX_CONF_TAKE1,
-     ngx_conf_set_str_slot,
+     ngx_conf_set_str_array_slot,
      NGX_HTTP_LOC_CONF_OFFSET,
      offsetof(ngx_http_java_loc_conf_t, class_path),
      NULL},
@@ -86,8 +86,7 @@ static void *ngx_http_java_create_conf(ngx_conf_t *cf)
     if (conf)
     {
         conf->expires = NGX_CONF_UNSET;
-        conf->class_path.data = NULL;
-        conf->class_path.len = 0;
+        conf->class_path = (ngx_array_t *)(NGX_CONF_UNSET_PTR);
         conf->options.data = NULL;
         conf->options.len = 0;
         conf->uri_pattern.data = NULL;
@@ -138,7 +137,13 @@ static ngx_int_t ngx_http_java_module_handler(ngx_http_request_t *r)
 
     if (java_engine == nullptr)
     {
-        java_engine = std::make_shared<hi::java>(std::string((char *)conf->class_path.data, conf->class_path.len), std::string((char *)conf->options.data, conf->options.len), conf->version, std::string((char *)conf->servlet.data, conf->servlet.len));
+        std::string cp = "-Djava.class.path=";
+        ngx_str_t *ptr = (ngx_str_t *)conf->class_path->elts;
+        for (ngx_uint_t i = 0; i < conf->class_path->nelts; ++i)
+        {
+            cp.append(std::string((char *)ptr[i].data, ptr[i].len)).append(":");
+        }
+        java_engine = std::make_shared<hi::java>(cp, std::string((char *)conf->options.data, conf->options.len), conf->version, std::string((char *)conf->servlet.data, conf->servlet.len));
     }
 
     java_engine->main(req, res);

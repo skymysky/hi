@@ -25,18 +25,12 @@ namespace hi
             .def_readonly("param", &request::param)
             .def_readonly("headers", &request::headers)
             .def_readonly("form", &request::form)
-            .def_readonly("cache", &request::cache)
             .def_readonly("cookies", &request::cookies)
-            .def_readonly("session", &request::session)
             .def("has_header", &request::has_header)
-            .def("has_cache", &request::has_cache)
             .def("has_cookie", &request::has_cookie)
-            .def("has_session", &request::has_session)
             .def("has_form", &request::has_form)
             .def("get_header", &request::get_header)
-            .def("get_cache", &request::get_cache)
             .def("get_cookie", &request::get_cookie)
-            .def("get_session", &request::get_session)
             .def("get_form", &request::get_form);
 
         pybind11::class_<response> response(m, "response");
@@ -44,13 +38,15 @@ namespace hi
             .def_readwrite("status", &response::status)
             .def_readwrite("content", &response::content)
             .def("set_header", &response::set_header)
-            .def("set_session", &response::set_session)
-            .def("set_cache", &response::set_cache)
-            .def("set_cookie", &response::set_cookie);
+            .def("set_cookie", &response::set_cookie)
+            .def("set_cookie_safe", &response::set_cookie_safe);
     }
+
+
     python::python() : guard(), os(), sys(), importlib(), anybyte_bind(), error_message("<p style='text-align:center;margin:100px;'>Server script error</p>")
     {
     }
+
     python::python(const std::string &search_path) : guard(), os(), sys(), importlib(), anybyte_bind(), error_message("<p style='text-align:center;margin:100px;'>Server script error</p>")
     {
         this->init(search_path);
@@ -118,4 +114,4 @@ namespace hi
         }
     }
 
-} // namespace anybyte
+} // namespace hi

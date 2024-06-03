@@ -1,4 +1,4 @@
-/// Copyright 2013-2023 Daniel Parker
+/// Copyright 2013-2024 Daniel Parker
 // Distributed under the Boost license, Version 1.0.
 // (See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 
@@ -51,11 +51,11 @@ namespace jsoncons {
        : public std::error_category
     {
     public:
-        const char* name() const noexcept override
+        const char* name() const noexcept final
         {
             return "jsoncons/json";
         }
-        std::string message(int ev) const override
+        std::string message(int ev) const final
         {
             switch (static_cast<json_errc>(ev))
             {
