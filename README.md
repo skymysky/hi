@@ -51,15 +51,19 @@ server {
     
     location ~ \.ldp {
         lua_load;
-        lua_package_search_path "/usr/local/nginx/app/lua/?.lua;/usr/local/nginx/app/lua/package/?.lua";
-        lua_cpackage_search_path "/usr/local/nginx/app/lua/?.so;/usr/local/nginx/app/lua/cpackage/?.so";
+        lua_package_search_path "/usr/local/nginx/app/lua/?.lua";
+        lua_package_search_path "/usr/local/nginx/app/lua/package/?.lua";
+        lua_cpackage_search_path "/usr/local/nginx/app/lua/?.so";
+        lua_cpackage_search_path "/usr/local/nginx/app/lua/cpackage/?.so";
         lua_uri_pattern ".*\.ldp$";
         lua_memory_limit 50;
         lua_expires 1m;
     }
     location ~ \.jdp {
         java_load;
-        java_class_path "-Djava.class.path=.:/usr/local/nginx/app/java:/usr/local/nginx/app/java/hi-nginx-java.jar:/usr/local/nginx/app/java/mariadb-java-client-2.7.4.jar:/usr/local/nginx/app/java/mysql-connector-java-8.0.26.jar:/usr/local/nginx/app/java/druid-1.2.6.jar:/usr/local/nginx/app/java/demo.jar";
+        java_class_path "/usr/local/nginx/app/java/hi-nginx-java.jar";
+        java_class_path "/usr/local/nginx/app/java/gson-2.8.6.jar";
+        java_class_path "/usr/local/nginx/app/java/app.jar";
         java_options "-server -d64  -Dconfig.file=/usr/local/nginx/app/java/application.conf";
         java_servlet "hi/controller";
         java_uri_pattern ".*\.jdp$";
