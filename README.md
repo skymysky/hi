@@ -12,9 +12,9 @@
 ```shell
 
 --add-module=module/ngx_http_autoblacklist_module   \
---with-http-hi-lua-version=lua5.3                   \
+--with-http-hi-lua-version=lua5.4                   \
 --add-module=module/ngx_http_lua_module             \
---with-http-hi-python-version=python-3.8-embed      \
+--with-http-hi-python-version=python-3.10-embed      \
 --add-module=module/ngx_http_py_module              \
 --add-module=module/ngx_http_java_module            \
 --add-module=module/ngx_http_cpp_module    
