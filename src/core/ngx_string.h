@@ -60,6 +60,8 @@ void ngx_strlow(u_char *dst, u_char *src, size_t n);
 #define ngx_strstr(s1, s2)  strstr((const char *) s1, (const char *) s2)
 #define ngx_strlen(s)       strlen((const char *) s)
 
+size_t ngx_strnlen(u_char *p, size_t n);
+
 #define ngx_strchr(s1, c)   strchr((const char *) s1, (int) c)
 
 static ngx_inline u_char *
@@ -85,6 +87,8 @@ ngx_strlchr(u_char *p, u_char *last, u_char c)
  */
 #define ngx_memzero(buf, n)       (void) memset(buf, 0, n)
 #define ngx_memset(buf, c, n)     (void) memset(buf, c, n)
+
+void ngx_explicit_memzero(void *buf, size_t n);
 
 
 #if (NGX_MEMCPY_LIMIT)
@@ -136,12 +140,12 @@ ngx_copy(u_char *dst, u_char *src, size_t len)
 #endif
 
 
-#define ngx_memmove(dst, src, n)   (void) memmove(dst, src, n)
-#define ngx_movemem(dst, src, n)   (((u_char *) memmove(dst, src, n)) + (n))
+#define ngx_memmove(dst, src, n)  (void) memmove(dst, src, n)
+#define ngx_movemem(dst, src, n)  (((u_char *) memmove(dst, src, n)) + (n))
 
 
 /* msvc and icc7 compile memcmp() to the inline loop */
-#define ngx_memcmp(s1, s2, n)  memcmp((const char *) s1, (const char *) s2, n)
+#define ngx_memcmp(s1, s2, n)     memcmp(s1, s2, n)
 
 
 u_char *ngx_cpystrn(u_char *dst, u_char *src, size_t n);

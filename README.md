@@ -1,198 +1,83 @@
-# Introduction
-A distribution of Nginx with c++ and python web development. 
-
-![hi-nginx-image](https://github.com/webcpp/hi/blob/master/hi-nginx.png)
-
-[hi_demo](https://github.com/webcpp/hi_demo).
-
-# Dependency
-- linux
-- gcc,g++(c++11)
-- hiredis-devel
-- python-devel
-- boost-devel
-
-# Installation
-see `install_demo.sh` or `--add-module=ngx_http_hi_module`
-
-
 # Features
 - All features of nginx(latest release) are inherited, i.e., it is 100% compatible with nginx.
+- Web development using python, c++, lua, java
 
-# Directives
-- directives : content: loc,if in loc
-    - hi,default: ""
+# Document
 
-    example:
-    
-```
-            location = /hello {
-                hi hi/hello.so ;
-            }
-```
-- directives : content: http,srv,loc,if in loc ,if in srv
-    - hi_need_cache,default: on
+[https://github.com/webcpp/hi-nginx-tutorial](https://github.com/webcpp/hi-nginx-tutorial)
 
-    example:
+# Installation
+`./configure --help` or see `install_demo.sh` or 
 
-```
-        hi_need_cache on|off;
-```
+```shell
 
-- directives : content: http,srv,loc,if in loc ,if in srv
-    - hi_cache_size,default: 10
+--add-module=module/ngx_http_autoblacklist_module   \
+--with-http-hi-lua-version=lua5.4                   \
+--add-module=module/ngx_http_lua_module             \
+--with-http-hi-python-version=python-3.10-embed      \
+--add-module=module/ngx_http_py_module              \
+--add-module=module/ngx_http_java_module            \
+--add-module=module/ngx_http_cpp_module    
 
-    example:
 
 ```
-        hi_cache_size 10;
-```
-
-- directives : content: http,srv,loc,if in loc ,if in srv
-    - hi_cache_expires,default: 300s
-
-    example:
-
-```
-        hi_cache_expires 300s;
-```
-
-- directives : content: http,srv,loc,if in loc ,if in srv
-    - hi_need_headers,default: off
-
-        example:
-
-```
-        hi_need_headers on|off;
-```
-
-- directives : content: http,srv,loc,if in loc ,if in srv
-    - hi_need_cookies,default: off
-
-        example:
-
-```
-        hi_need_cookies on|off;
-```
-
-- directives : content: http,srv,loc,if in loc ,if in srv
-    - hi_need_session,default: off
-
-        example:
-
-```
-        hi_need_session on|off;
-```
-
-- directives : content: http,srv,loc,if in loc ,if in srv
-    - hi_session_expires,default: 300s
-
-    example:
-
-```
-        hi_session_expires 300s;
-```
-     
-
-- directives : content: http,srv,loc,if in loc ,if in srv
-    - hi_redis_host,default: ""
-
-    example:
-
-```
-        hi_redis_host 127.0.0.1;
-```
-
-- directives : content: http,srv,loc,if in loc ,if in srv
-    - hi_redis_port,default: 0
-
-    example:
-
-```
-        hi_redis_port 6379;
-```
-
-
-- directives : content: loc,if in loc
-    - hi_python_content,default: ""
-
-    example:
-    
-```
-            location = /pyecho {
-                hi_python_content "hi_res.status(200)\nhi_res.content('hello,world')" ;
-            }
-```
-- directives : content: loc,if in loc
-    - hi_python_srcipt,default: ""
-
-    example:
-    
-```
-            location ~ \.py$  {
-                hi_python_script python;
-            }
-```
-
-# python api
-## hi_req
-- uri
-- method
-- client
-- param
-- user_agent
-- has_header
-- get_header
-- has_form
-- get_form
-- has_session
-- get_session
-- has_cookie
-- get_cookie
-## hi_res
-- status
-- content
-- header
-- session
-
-# hello,world
-
-## class
-
-```
-#include "servlet.hpp"
-namespace hi{
-class hello : public servlet {
-    public:
-
-        void handler(request& req, response& res) {
-            res.headers.find("Content-Type")->second = "text/plain;charset=UTF-8";
-            res.content = "hello,world";
-            res.status = 200;
-        }
-
-    };
-}
-
-extern "C" hi::servlet* create() {
-    return new hi::hello();
-}
-
-extern "C" void destroy(hi::servlet* p) {
-    delete p;
-}
-
-```
-
-## compile
-
-```
-g++ -std=c++11 -I/home/centos7/nginx/include  -shared -fPIC hello.cpp -o hello.so
-install hello.so /home/centos7/nginx/hi
-
-```
-
 
 ## nginx.conf
 
-[hi_demo_conf](https://github.com/webcpp/hi_demo/blob/master/demo.conf)
+```nginx
+
+server {
+    listen 80;
+    server_name localhost;
+	
+    autoblacklist on;
+    autoblacklist_size 1024;
+    autoblacklist_expires 1d;
+    autoblacklist_limit 30;
+
+    location ~ \.cdp {
+        cpp_load;
+        cpp_search_path "/usr/local/nginx/app/cpp";
+        cpp_uri_pattern ".*\.cdp$";
+        cpp_expires 1m;
+    }
+
+    location ~ \.pdp {
+        py_load;
+        py_search_path "/usr/local/nginx/app/python";
+        py_uri_pattern ".*\.pdp$";
+        py_expires 1m;
+    }
+    
+    location ~ \.ldp {
+        lua_load;
+        lua_package_search_path "/usr/local/nginx/app/lua/?.lua";
+        lua_package_search_path "/usr/local/nginx/app/lua/package/?.lua";
+        lua_cpackage_search_path "/usr/local/nginx/app/lua/?.so";
+        lua_cpackage_search_path "/usr/local/nginx/app/lua/cpackage/?.so";
+        lua_uri_pattern ".*\.ldp$";
+        lua_memory_limit 50;
+        lua_expires 1m;
+    }
+    location ~ \.jdp {
+        java_load;
+        java_class_path "/usr/local/nginx/app/java/hi-nginx-java.jar";
+        java_class_path "/usr/local/nginx/app/java/gson-2.8.6.jar";
+        java_class_path "/usr/local/nginx/app/java/app.jar";
+        java_options "-server -d64  -Dconfig.file=/usr/local/nginx/app/java/application.conf";
+        java_servlet "hi/controller";
+        java_uri_pattern ".*\.jdp$";
+        java_expires 1m;
+        java_version 11;    
+    }
+
+    location / {
+        access_log off;
+        root   html;
+        index  index.html index.htm;
+    }
+
+}
+
+
+```

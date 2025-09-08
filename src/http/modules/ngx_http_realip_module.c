@@ -122,7 +122,7 @@ static ngx_http_variable_t  ngx_http_realip_vars[] = {
     { ngx_string("realip_remote_port"), NULL,
       ngx_http_realip_remote_port_variable, 0, 0, 0 },
 
-    { ngx_null_string, NULL, NULL, 0, 0, 0 }
+      ngx_http_null_variable
 };
 
 
@@ -134,9 +134,8 @@ ngx_http_realip_handler(ngx_http_request_t *r)
     ngx_str_t                   *value;
     ngx_uint_t                   i, hash;
     ngx_addr_t                   addr;
-    ngx_array_t                 *xfwd;
     ngx_list_part_t             *part;
-    ngx_table_elt_t             *header;
+    ngx_table_elt_t             *header, *xfwd;
     ngx_connection_t            *c;
     ngx_http_realip_ctx_t       *ctx;
     ngx_http_realip_loc_conf_t  *rlcf;
@@ -168,9 +167,9 @@ ngx_http_realip_handler(ngx_http_request_t *r)
 
     case NGX_HTTP_REALIP_XFWD:
 
-        xfwd = &r->headers_in.x_forwarded_for;
+        xfwd = r->headers_in.x_forwarded_for;
 
-        if (xfwd->elts == NULL) {
+        if (xfwd == NULL) {
             return NGX_DECLINED;
         }
 
@@ -180,12 +179,11 @@ ngx_http_realip_handler(ngx_http_request_t *r)
 
     case NGX_HTTP_REALIP_PROXY:
 
-        value = &r->connection->proxy_protocol_addr;
-
-        if (value->len == 0) {
+        if (r->connection->proxy_protocol == NULL) {
             return NGX_DECLINED;
         }
 
+        value = &r->connection->proxy_protocol->src_addr;
         xfwd = NULL;
 
         break;
@@ -238,7 +236,7 @@ found:
         != NGX_DECLINED)
     {
         if (rlcf->type == NGX_HTTP_REALIP_PROXY) {
-            ngx_inet_set_port(addr.sockaddr, c->proxy_protocol_port);
+            ngx_inet_set_port(addr.sockaddr, c->proxy_protocol->src_port);
         }
 
         return ngx_http_realip_set_addr(r, &addr);

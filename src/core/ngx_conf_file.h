@@ -49,7 +49,7 @@
 #define NGX_DIRECT_CONF      0x00010000
 
 #define NGX_MAIN_CONF        0x01000000
-#define NGX_ANY_CONF         0x1F000000
+#define NGX_ANY_CONF         0xFF000000
 
 
 
@@ -128,7 +128,7 @@ struct ngx_conf_s {
     ngx_uint_t            cmd_type;
 
     ngx_conf_handler_pt   handler;
-    char                 *handler_conf;
+    void                 *handler_conf;
 };
 
 

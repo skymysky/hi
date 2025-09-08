@@ -36,6 +36,9 @@ ngx_os_init(ngx_log_t *log)
 {
     ngx_time_t  *tp;
     ngx_uint_t   n;
+#if (NGX_HAVE_LEVEL1_DCACHE_LINESIZE)
+    long         size;
+#endif
 
 #if (NGX_HAVE_OS_SPECIFIC_INIT)
     if (ngx_os_specific_init(log) != NGX_OK) {
@@ -48,7 +51,10 @@ ngx_os_init(ngx_log_t *log)
     }
 
     ngx_pagesize = getpagesize();
-    ngx_cacheline_size = NGX_CPU_CACHE_LINE;
+
+    if (ngx_cacheline_size == 0) {
+        ngx_cacheline_size = NGX_CPU_CACHE_LINE;
+    }
 
     for (n = ngx_pagesize; n >>= 1; ngx_pagesize_shift++) { /* void */ }
 
@@ -61,6 +67,13 @@ ngx_os_init(ngx_log_t *log)
     if (ngx_ncpu < 1) {
         ngx_ncpu = 1;
     }
+
+#if (NGX_HAVE_LEVEL1_DCACHE_LINESIZE)
+    size = sysconf(_SC_LEVEL1_DCACHE_LINESIZE);
+    if (size > 0) {
+        ngx_cacheline_size = size;
+    }
+#endif
 
     ngx_cpuinfo();
 

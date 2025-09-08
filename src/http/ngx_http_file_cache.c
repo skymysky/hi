@@ -14,7 +14,7 @@
 static ngx_int_t ngx_http_file_cache_lock(ngx_http_request_t *r,
     ngx_http_cache_t *c);
 static void ngx_http_file_cache_lock_wait_handler(ngx_event_t *ev);
-static void ngx_http_file_cache_lock_wait(ngx_http_request_t *r,
+static ngx_int_t ngx_http_file_cache_lock_wait(ngx_http_request_t *r,
     ngx_http_cache_t *c);
 static ngx_int_t ngx_http_file_cache_read(ngx_http_request_t *r,
     ngx_http_cache_t *c);
@@ -129,6 +129,7 @@ ngx_http_file_cache_init(ngx_shm_zone_t *shm_zone, void *data)
     if (shm_zone->shm.exists) {
         cache->sh = cache->shpool->data;
         cache->bsize = ngx_fs_bsize(cache->path->name.data);
+        cache->max_size /= cache->bsize;
 
         return NGX_OK;
     }
@@ -292,6 +293,8 @@ ngx_http_file_cache_open(ngx_http_request_t *r)
         cln->handler = ngx_http_file_cache_cleanup;
         cln->data = c;
     }
+
+    c->buffer_size = c->body_start;
 
     rc = ngx_http_file_cache_exists(cache, c);
 
@@ -460,6 +463,7 @@ ngx_http_file_cache_lock(ngx_http_request_t *r, ngx_http_cache_t *c)
 static void
 ngx_http_file_cache_lock_wait_handler(ngx_event_t *ev)
 {
+    ngx_int_t            rc;
     ngx_connection_t    *c;
     ngx_http_request_t  *r;
 
@@ -471,13 +475,31 @@ ngx_http_file_cache_lock_wait_handler(ngx_event_t *ev)
     ngx_log_debug2(NGX_LOG_DEBUG_HTTP, c->log, 0,
                    "http file cache wait: \"%V?%V\"", &r->uri, &r->args);
 
-    ngx_http_file_cache_lock_wait(r, r->cache);
+    rc = ngx_http_file_cache_lock_wait(r, r->cache);
 
-    ngx_http_run_posted_requests(c);
+    if (rc == NGX_AGAIN) {
+        return;
+    }
+
+    r->cache->waiting = 0;
+    r->main->blocked--;
+
+    if (r->main->terminated) {
+        /*
+         * trigger connection event handler if the request was
+         * terminated
+         */
+
+        c->write->handler(c->write);
+
+    } else {
+        r->write_event_handler(r);
+        ngx_http_run_posted_requests(c);
+    }
 }
 
 
-static void
+static ngx_int_t
 ngx_http_file_cache_lock_wait(ngx_http_request_t *r, ngx_http_cache_t *c)
 {
     ngx_uint_t              wait;
@@ -492,7 +514,7 @@ ngx_http_file_cache_lock_wait(ngx_http_request_t *r, ngx_http_cache_t *c)
         ngx_log_error(NGX_LOG_INFO, r->connection->log, 0,
                       "cache lock timeout");
         c->lock_timeout = 0;
-        goto wakeup;
+        return NGX_OK;
     }
 
     cache = c->file_cache;
@@ -510,14 +532,10 @@ ngx_http_file_cache_lock_wait(ngx_http_request_t *r, ngx_http_cache_t *c)
 
     if (wait) {
         ngx_add_timer(&c->wait_event, (timer > 500) ? 500 : timer);
-        return;
+        return NGX_AGAIN;
     }
 
-wakeup:
-
-    c->waiting = 0;
-    r->main->blocked--;
-    r->write_event_handler(r);
+    return NGX_OK;
 }
 
 
@@ -687,6 +705,8 @@ ngx_http_file_cache_aio_read(ngx_http_request_t *r, ngx_http_cache_t *c)
         c->file.aio->data = r;
         c->file.aio->handler = ngx_http_cache_aio_event_handler;
 
+        ngx_add_timer(&c->file.aio->event, 60000);
+
         r->main->blocked++;
         r->aio = 1;
 
@@ -734,12 +754,32 @@ ngx_http_cache_aio_event_handler(ngx_event_t *ev)
     ngx_log_debug2(NGX_LOG_DEBUG_HTTP, c->log, 0,
                    "http file cache aio: \"%V?%V\"", &r->uri, &r->args);
 
+    if (ev->timedout) {
+        ngx_log_error(NGX_LOG_ALERT, c->log, 0,
+                      "aio operation took too long");
+        ev->timedout = 0;
+        return;
+    }
+
+    if (ev->timer_set) {
+        ngx_del_timer(ev);
+    }
+
     r->main->blocked--;
     r->aio = 0;
 
-    r->write_event_handler(r);
+    if (r->main->terminated) {
+        /*
+         * trigger connection event handler if the request was
+         * terminated
+         */
 
-    ngx_http_run_posted_requests(c);
+        c->write->handler(c->write);
+
+    } else {
+        r->write_event_handler(r);
+        ngx_http_run_posted_requests(c);
+    }
 }
 
 #endif
@@ -783,6 +823,8 @@ ngx_http_cache_thread_handler(ngx_thread_task_t *task, ngx_file_t *file)
         return NGX_ERROR;
     }
 
+    ngx_add_timer(&task->event, 60000);
+
     r->main->blocked++;
     r->aio = 1;
 
@@ -804,12 +846,32 @@ ngx_http_cache_thread_event_handler(ngx_event_t *ev)
     ngx_log_debug2(NGX_LOG_DEBUG_HTTP, c->log, 0,
                    "http file cache thread: \"%V?%V\"", &r->uri, &r->args);
 
+    if (ev->timedout) {
+        ngx_log_error(NGX_LOG_ALERT, c->log, 0,
+                      "thread operation took too long");
+        ev->timedout = 0;
+        return;
+    }
+
+    if (ev->timer_set) {
+        ngx_del_timer(ev);
+    }
+
     r->main->blocked--;
     r->aio = 0;
 
-    r->write_event_handler(r);
+    if (r->main->terminated) {
+        /*
+         * trigger connection event handler if the request was
+         * terminated
+         */
 
-    ngx_http_run_posted_requests(c);
+        c->write->handler(c->write);
+
+    } else {
+        r->write_event_handler(r);
+        ngx_http_run_posted_requests(c);
+    }
 }
 
 #endif
@@ -851,7 +913,7 @@ ngx_http_file_cache_exists(ngx_http_file_cache_t *cache, ngx_http_cache_t *c)
         if (fcn->exists || fcn->uses >= c->min_uses) {
 
             c->exists = fcn->exists;
-            if (fcn->body_start) {
+            if (fcn->body_start && !c->update_variant) {
                 c->body_start = fcn->body_start;
             }
 
@@ -1229,7 +1291,7 @@ ngx_http_file_cache_reopen(ngx_http_request_t *r, ngx_http_cache_t *c)
 
     c->secondary = 1;
     c->file.name.len = 0;
-    c->body_start = c->buf->end - c->buf->start;
+    c->body_start = c->buffer_size;
 
     ngx_memcpy(c->key, c->variant, NGX_HTTP_CACHE_KEY_LEN);
 
@@ -1336,6 +1398,7 @@ ngx_http_file_cache_update_variant(ngx_http_request_t *r, ngx_http_cache_t *c)
     ngx_shmtx_unlock(&cache->shpool->mutex);
 
     c->file.name.len = 0;
+    c->update_variant = 1;
 
     ngx_memcpy(c->key, c->main, NGX_HTTP_CACHE_KEY_LEN);
 
@@ -1571,10 +1634,6 @@ ngx_http_cache_send(ngx_http_request_t *r)
     ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
                    "http file cache send: %s", c->file.name.data);
 
-    if (r != r->main && c->length - c->body_start == 0) {
-        return ngx_http_send_header(r);
-    }
-
     /* we need to allocate all before the header would be sent */
 
     b = ngx_calloc_buf(r->pool);
@@ -1596,9 +1655,10 @@ ngx_http_cache_send(ngx_http_request_t *r)
     b->file_pos = c->body_start;
     b->file_last = c->length;
 
-    b->in_file = (c->length - c->body_start) ? 1: 0;
-    b->last_buf = (r == r->main) ? 1: 0;
+    b->in_file = (c->length - c->body_start) ? 1 : 0;
+    b->last_buf = (r == r->main) ? 1 : 0;
     b->last_in_chain = 1;
+    b->sync = (b->last_buf || b->in_file) ? 0 : 1;
 
     b->file->fd = c->file.fd;
     b->file->name = c->file.name;
@@ -1749,6 +1809,11 @@ ngx_http_file_cache_forced_expire(ngx_http_file_cache_t *cache)
         if (fcn->count == 0) {
             ngx_http_file_cache_delete(cache, q, name);
             wait = 0;
+            break;
+        }
+
+        if (fcn->deleting) {
+            wait = 1;
             break;
         }
 
@@ -1958,7 +2023,7 @@ ngx_http_file_cache_manager(void *data)
 {
     ngx_http_file_cache_t  *cache = data;
 
-    off_t       size;
+    off_t       size, free;
     time_t      wait;
     ngx_msec_t  elapsed, next;
     ngx_uint_t  count, watermark;
@@ -1987,7 +2052,19 @@ ngx_http_file_cache_manager(void *data)
                        size, count, (ngx_int_t) watermark);
 
         if (size < cache->max_size && count < watermark) {
-            break;
+
+            if (!cache->min_free) {
+                break;
+            }
+
+            free = ngx_fs_available(cache->path->name.data);
+
+            ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ngx_cycle->log, 0,
+                           "http file cache free: %O", free);
+
+            if (free > cache->min_free) {
+                break;
+            }
         }
 
         wait = ngx_http_file_cache_forced_expire(cache);
@@ -2303,7 +2380,7 @@ ngx_http_file_cache_set_slot(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 {
     char  *confp = conf;
 
-    off_t                   max_size;
+    off_t                   max_size, min_free;
     u_char                 *last, *p;
     time_t                  inactive;
     ssize_t                 size;
@@ -2340,6 +2417,7 @@ ngx_http_file_cache_set_slot(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
     name.len = 0;
     size = 0;
     max_size = NGX_MAX_OFF_T_VALUE;
+    min_free = 0;
 
     value = cf->args->elts;
 
@@ -2417,23 +2495,32 @@ ngx_http_file_cache_set_slot(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 
             p = (u_char *) ngx_strchr(name.data, ':');
 
-            if (p) {
-                name.len = p - name.data;
-
-                p++;
-
-                s.len = value[i].data + value[i].len - p;
-                s.data = p;
-
-                size = ngx_parse_size(&s);
-                if (size > 8191) {
-                    continue;
-                }
+            if (p == NULL) {
+                ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
+                                   "invalid keys zone size \"%V\"", &value[i]);
+                return NGX_CONF_ERROR;
             }
 
-            ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
-                               "invalid keys zone size \"%V\"", &value[i]);
-            return NGX_CONF_ERROR;
+            name.len = p - name.data;
+
+            s.data = p + 1;
+            s.len = value[i].data + value[i].len - s.data;
+
+            size = ngx_parse_size(&s);
+
+            if (size == NGX_ERROR) {
+                ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
+                                   "invalid keys zone size \"%V\"", &value[i]);
+                return NGX_CONF_ERROR;
+            }
+
+            if (size < (ssize_t) (2 * ngx_pagesize)) {
+                ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
+                                   "keys zone \"%V\" is too small", &value[i]);
+                return NGX_CONF_ERROR;
+            }
+
+            continue;
         }
 
         if (ngx_strncmp(value[i].data, "inactive=", 9) == 0) {
@@ -2462,6 +2549,29 @@ ngx_http_file_cache_set_slot(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
                                    "invalid max_size value \"%V\"", &value[i]);
                 return NGX_CONF_ERROR;
             }
+
+            continue;
+        }
+
+        if (ngx_strncmp(value[i].data, "min_free=", 9) == 0) {
+
+#if (NGX_WIN32 || NGX_HAVE_STATFS || NGX_HAVE_STATVFS)
+
+            s.len = value[i].len - 9;
+            s.data = value[i].data + 9;
+
+            min_free = ngx_parse_offset(&s);
+            if (min_free < 0) {
+                ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
+                                   "invalid min_free value \"%V\"", &value[i]);
+                return NGX_CONF_ERROR;
+            }
+
+#else
+            ngx_conf_log_error(NGX_LOG_WARN, cf, 0,
+                               "min_free is not supported "
+                               "on this platform, ignored");
+#endif
 
             continue;
         }
@@ -2597,6 +2707,7 @@ ngx_http_file_cache_set_slot(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 
     cache->inactive = inactive;
     cache->max_size = max_size;
+    cache->min_free = min_free;
 
     caches = (ngx_array_t *) (confp + cmd->offset);
 
@@ -2619,7 +2730,8 @@ ngx_http_file_cache_valid_set_slot(ngx_conf_t *cf, ngx_command_t *cmd,
 
     time_t                    valid;
     ngx_str_t                *value;
-    ngx_uint_t                i, n, status;
+    ngx_int_t                 status;
+    ngx_uint_t                i, n;
     ngx_array_t             **a;
     ngx_http_cache_valid_t   *v;
     static ngx_uint_t         statuses[] = { 200, 301, 302 };
@@ -2667,7 +2779,7 @@ ngx_http_file_cache_valid_set_slot(ngx_conf_t *cf, ngx_command_t *cmd,
         } else {
 
             status = ngx_atoi(value[i].data, value[i].len);
-            if (status < 100) {
+            if (status < 100 || status > 599) {
                 ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
                                    "invalid status \"%V\"", &value[i]);
                 return NGX_CONF_ERROR;

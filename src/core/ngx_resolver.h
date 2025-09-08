@@ -175,8 +175,10 @@ struct ngx_resolver_s {
     ngx_queue_t               srv_expire_queue;
     ngx_queue_t               addr_expire_queue;
 
+    unsigned                  ipv4:1;
+
 #if (NGX_HAVE_INET6)
-    ngx_uint_t                ipv6;                 /* unsigned  ipv6:1; */
+    unsigned                  ipv6:1;
     ngx_rbtree_t              addr6_rbtree;
     ngx_rbtree_node_t         addr6_sentinel;
     ngx_queue_t               addr6_resend_queue;
@@ -218,7 +220,9 @@ struct ngx_resolver_ctx_s {
     void                     *data;
     ngx_msec_t                timeout;
 
-    ngx_uint_t                quick;  /* unsigned  quick:1; */
+    unsigned                  quick:1;
+    unsigned                  async:1;
+    unsigned                  cancelable:1;
     ngx_uint_t                recursion;
     ngx_event_t              *event;
 };

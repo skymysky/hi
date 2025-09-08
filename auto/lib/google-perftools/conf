@@ -9,7 +9,8 @@
     ngx_feature_incs=
     ngx_feature_path=
     ngx_feature_libs="-lprofiler"
-    ngx_feature_test="ProfilerStop()"
+    ngx_feature_test="void ProfilerStop(void);
+                      ProfilerStop()"
     . auto/feature
 
 
@@ -39,6 +40,22 @@ if [ $ngx_found = no ]; then
         ngx_feature_libs="-R/opt/local/lib -L/opt/local/lib -lprofiler"
     else
         ngx_feature_libs="-L/opt/local/lib -lprofiler"
+    fi
+
+    . auto/feature
+fi
+
+
+if [ $ngx_found = no ]; then
+
+    # Homebrew on Apple Silicon
+
+    ngx_feature="Google perftools in /opt/homebrew/"
+
+    if [ $NGX_RPATH = YES ]; then
+        ngx_feature_libs="-R/opt/homebrew/lib -L/opt/homebrew/lib -lprofiler"
+    else
+        ngx_feature_libs="-L/opt/homebrew/lib -lprofiler"
     fi
 
     . auto/feature

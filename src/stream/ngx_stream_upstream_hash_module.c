@@ -23,6 +23,9 @@ typedef struct {
 
 
 typedef struct {
+#if (NGX_STREAM_UPSTREAM_ZONE)
+    ngx_uint_t                            config;
+#endif
     ngx_stream_complex_value_t            key;
     ngx_stream_upstream_chash_points_t   *points;
 } ngx_stream_upstream_hash_srv_conf_t;
@@ -48,6 +51,8 @@ static ngx_int_t ngx_stream_upstream_get_hash_peer(ngx_peer_connection_t *pc,
     void *data);
 
 static ngx_int_t ngx_stream_upstream_init_chash(ngx_conf_t *cf,
+    ngx_stream_upstream_srv_conf_t *us);
+static ngx_int_t ngx_stream_upstream_update_chash(ngx_pool_t *pool,
     ngx_stream_upstream_srv_conf_t *us);
 static int ngx_libc_cdecl
     ngx_stream_upstream_chash_cmp_points(const void *one, const void *two);
@@ -176,12 +181,19 @@ ngx_stream_upstream_get_hash_peer(ngx_peer_connection_t *pc, void *data)
     ngx_log_debug1(NGX_LOG_DEBUG_STREAM, pc->log, 0,
                    "get hash peer, try: %ui", pc->tries);
 
-    ngx_stream_upstream_rr_peers_wlock(hp->rrp.peers);
+    ngx_stream_upstream_rr_peers_rlock(hp->rrp.peers);
 
-    if (hp->tries > 20 || hp->rrp.peers->single) {
+    if (hp->tries > 20 || hp->rrp.peers->number < 2 || hp->key.len == 0) {
         ngx_stream_upstream_rr_peers_unlock(hp->rrp.peers);
         return hp->get_rr_peer(pc, &hp->rrp);
     }
+
+#if (NGX_STREAM_UPSTREAM_ZONE)
+    if (hp->rrp.peers->config && hp->rrp.config != *hp->rrp.peers->config) {
+        ngx_stream_upstream_rr_peers_unlock(hp->rrp.peers);
+        return hp->get_rr_peer(pc, &hp->rrp);
+    }
+#endif
 
     now = ngx_time();
 
@@ -227,10 +239,13 @@ ngx_stream_upstream_get_hash_peer(ngx_peer_connection_t *pc, void *data)
             goto next;
         }
 
+        ngx_stream_upstream_rr_peer_lock(hp->rrp.peers, peer);
+
         ngx_log_debug2(NGX_LOG_DEBUG_STREAM, pc->log, 0,
                        "get hash peer, value:%uD, peer:%ui", hp->hash, p);
 
         if (peer->down) {
+            ngx_stream_upstream_rr_peer_unlock(hp->rrp.peers, peer);
             goto next;
         }
 
@@ -238,10 +253,12 @@ ngx_stream_upstream_get_hash_peer(ngx_peer_connection_t *pc, void *data)
             && peer->fails >= peer->max_fails
             && now - peer->checked <= peer->fail_timeout)
         {
+            ngx_stream_upstream_rr_peer_unlock(hp->rrp.peers, peer);
             goto next;
         }
 
         if (peer->max_conns && peer->conns >= peer->max_conns) {
+            ngx_stream_upstream_rr_peer_unlock(hp->rrp.peers, peer);
             goto next;
         }
 
@@ -256,6 +273,7 @@ ngx_stream_upstream_get_hash_peer(ngx_peer_connection_t *pc, void *data)
     }
 
     hp->rrp.current = peer;
+    ngx_stream_upstream_rr_peer_ref(hp->rrp.peers, peer);
 
     pc->sockaddr = peer->sockaddr;
     pc->socklen = peer->socklen;
@@ -267,6 +285,7 @@ ngx_stream_upstream_get_hash_peer(ngx_peer_connection_t *pc, void *data)
         peer->checked = now;
     }
 
+    ngx_stream_upstream_rr_peer_unlock(hp->rrp.peers, peer);
     ngx_stream_upstream_rr_peers_unlock(hp->rrp.peers);
 
     hp->rrp.tried[n] |= m;
@@ -277,6 +296,26 @@ ngx_stream_upstream_get_hash_peer(ngx_peer_connection_t *pc, void *data)
 
 static ngx_int_t
 ngx_stream_upstream_init_chash(ngx_conf_t *cf,
+    ngx_stream_upstream_srv_conf_t *us)
+{
+    if (ngx_stream_upstream_init_round_robin(cf, us) != NGX_OK) {
+        return NGX_ERROR;
+    }
+
+    us->peer.init = ngx_stream_upstream_init_chash_peer;
+
+#if (NGX_STREAM_UPSTREAM_ZONE)
+    if (us->shm_zone) {
+        return NGX_OK;
+    }
+#endif
+
+    return ngx_stream_upstream_update_chash(cf->pool, us);
+}
+
+
+static ngx_int_t
+ngx_stream_upstream_update_chash(ngx_pool_t *pool,
     ngx_stream_upstream_srv_conf_t *us)
 {
     u_char                               *host, *port, c;
@@ -293,24 +332,32 @@ ngx_stream_upstream_init_chash(ngx_conf_t *cf,
         u_char                            byte[4];
     } prev_hash;
 
-    if (ngx_stream_upstream_init_round_robin(cf, us) != NGX_OK) {
-        return NGX_ERROR;
-    }
+    hcf = ngx_stream_conf_upstream_srv_conf(us,
+                                            ngx_stream_upstream_hash_module);
 
-    us->peer.init = ngx_stream_upstream_init_chash_peer;
+    if (hcf->points) {
+        ngx_free(hcf->points);
+        hcf->points = NULL;
+    }
 
     peers = us->peer.data;
     npoints = peers->total_weight * 160;
 
     size = sizeof(ngx_stream_upstream_chash_points_t)
-           + sizeof(ngx_stream_upstream_chash_point_t) * (npoints - 1);
+           - sizeof(ngx_stream_upstream_chash_point_t)
+           + sizeof(ngx_stream_upstream_chash_point_t) * npoints;
 
-    points = ngx_palloc(cf->pool, size);
+    points = pool ? ngx_palloc(pool, size) : ngx_alloc(size, ngx_cycle->log);
     if (points == NULL) {
         return NGX_ERROR;
     }
 
     points->number = 0;
+
+    if (npoints == 0) {
+        hcf->points = points;
+        return NGX_OK;
+    }
 
     for (peer = peers->peer; peer; peer = peer->next) {
         server = &peer->server;
@@ -395,8 +442,6 @@ ngx_stream_upstream_init_chash(ngx_conf_t *cf,
 
     points->number = i + 1;
 
-    hcf = ngx_stream_conf_upstream_srv_conf(us,
-                                            ngx_stream_upstream_hash_module);
     hcf->points = points;
 
     return NGX_OK;
@@ -477,7 +522,22 @@ ngx_stream_upstream_init_chash_peer(ngx_stream_session_t *s,
 
     ngx_stream_upstream_rr_peers_rlock(hp->rrp.peers);
 
-    hp->hash = ngx_stream_upstream_find_chash_point(hcf->points, hash);
+#if (NGX_STREAM_UPSTREAM_ZONE)
+    if (hp->rrp.peers->config
+        && (hcf->points == NULL || hcf->config != *hp->rrp.peers->config))
+    {
+        if (ngx_stream_upstream_update_chash(NULL, us) != NGX_OK) {
+            ngx_stream_upstream_rr_peers_unlock(hp->rrp.peers);
+            return NGX_ERROR;
+        }
+
+        hcf->config = *hp->rrp.peers->config;
+    }
+#endif
+
+    if (hcf->points->number) {
+        hp->hash = ngx_stream_upstream_find_chash_point(hcf->points, hash);
+    }
 
     ngx_stream_upstream_rr_peers_unlock(hp->rrp.peers);
 
@@ -505,7 +565,26 @@ ngx_stream_upstream_get_chash_peer(ngx_peer_connection_t *pc, void *data)
 
     ngx_stream_upstream_rr_peers_wlock(hp->rrp.peers);
 
+    if (hp->tries > 20 || hp->rrp.peers->single || hp->key.len == 0) {
+        ngx_stream_upstream_rr_peers_unlock(hp->rrp.peers);
+        return hp->get_rr_peer(pc, &hp->rrp);
+    }
+
     pc->connection = NULL;
+
+    if (hp->rrp.peers->number == 0) {
+        pc->name = hp->rrp.peers->name;
+        ngx_stream_upstream_rr_peers_unlock(hp->rrp.peers);
+        return NGX_BUSY;
+    }
+
+#if (NGX_STREAM_UPSTREAM_ZONE)
+    if (hp->rrp.peers->config && hp->rrp.config != *hp->rrp.peers->config) {
+        pc->name = hp->rrp.peers->name;
+        ngx_stream_upstream_rr_peers_unlock(hp->rrp.peers);
+        return NGX_BUSY;
+    }
+#endif
 
     now = ngx_time();
     hcf = hp->conf;
@@ -539,13 +618,6 @@ ngx_stream_upstream_get_chash_peer(ngx_peer_connection_t *pc, void *data)
                 continue;
             }
 
-            if (peer->server.len != server->len
-                || ngx_strncmp(peer->server.data, server->data, server->len)
-                   != 0)
-            {
-                continue;
-            }
-
             if (peer->max_fails
                 && peer->fails >= peer->max_fails
                 && now - peer->checked <= peer->fail_timeout)
@@ -554,6 +626,13 @@ ngx_stream_upstream_get_chash_peer(ngx_peer_connection_t *pc, void *data)
             }
 
             if (peer->max_conns && peer->conns >= peer->max_conns) {
+                continue;
+            }
+
+            if (peer->server.len != server->len
+                || ngx_strncmp(peer->server.data, server->data, server->len)
+                   != 0)
+            {
                 continue;
             }
 
@@ -578,14 +657,14 @@ ngx_stream_upstream_get_chash_peer(ngx_peer_connection_t *pc, void *data)
         hp->hash++;
         hp->tries++;
 
-        if (hp->tries >= points->number) {
-            pc->name = hp->rrp.peers->name;
+        if (hp->tries > 20) {
             ngx_stream_upstream_rr_peers_unlock(hp->rrp.peers);
-            return NGX_BUSY;
+            return hp->get_rr_peer(pc, &hp->rrp);
         }
     }
 
     hp->rrp.current = best;
+    ngx_stream_upstream_rr_peer_ref(hp->rrp.peers, best);
 
     pc->sockaddr = best->sockaddr;
     pc->socklen = best->socklen;
@@ -653,6 +732,7 @@ ngx_stream_upstream_hash(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
     }
 
     uscf->flags = NGX_STREAM_UPSTREAM_CREATE
+                  |NGX_STREAM_UPSTREAM_MODIFY
                   |NGX_STREAM_UPSTREAM_WEIGHT
                   |NGX_STREAM_UPSTREAM_MAX_CONNS
                   |NGX_STREAM_UPSTREAM_MAX_FAILS

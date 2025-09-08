@@ -21,6 +21,7 @@
 #define NGX_STREAM_UPSTREAM_FAIL_TIMEOUT  0x0008
 #define NGX_STREAM_UPSTREAM_DOWN          0x0010
 #define NGX_STREAM_UPSTREAM_BACKUP        0x0020
+#define NGX_STREAM_UPSTREAM_MODIFY        0x0040
 #define NGX_STREAM_UPSTREAM_MAX_CONNS     0x0100
 
 
@@ -58,12 +59,14 @@ typedef struct {
     ngx_uint_t                         max_fails;
     time_t                             fail_timeout;
     ngx_msec_t                         slow_start;
+    ngx_uint_t                         down;
 
-    unsigned                           down:1;
     unsigned                           backup:1;
 
-    NGX_COMPAT_BEGIN(4)
-    NGX_COMPAT_END
+#if (NGX_STREAM_UPSTREAM_ZONE)
+    ngx_str_t                          host;
+    ngx_str_t                          service;
+#endif
 } ngx_stream_upstream_server_t;
 
 
@@ -83,6 +86,8 @@ struct ngx_stream_upstream_srv_conf_s {
 
 #if (NGX_STREAM_UPSTREAM_ZONE)
     ngx_shm_zone_t                    *shm_zone;
+    ngx_resolver_t                    *resolver;
+    ngx_msec_t                         resolver_timeout;
 #endif
 };
 
@@ -128,7 +133,12 @@ typedef struct {
 
     off_t                              received;
     time_t                             start_sec;
+    ngx_uint_t                         requests;
     ngx_uint_t                         responses;
+    ngx_msec_t                         start_time;
+
+    size_t                             upload_rate;
+    size_t                             download_rate;
 
     ngx_str_t                          ssl_name;
 
@@ -137,6 +147,7 @@ typedef struct {
     ngx_stream_upstream_state_t       *state;
     unsigned                           connected:1;
     unsigned                           proxy_protocol:1;
+    unsigned                           half_closed:1;
 } ngx_stream_upstream_t;
 
 

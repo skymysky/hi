@@ -210,7 +210,7 @@ static ngx_stream_variable_t  ngx_stream_geoip_vars[] = {
       ngx_stream_geoip_city_int_variable,
       offsetof(GeoIPRecord, area_code), 0, 0 },
 
-    { ngx_null_string, NULL, NULL, 0, 0, 0 }
+      ngx_stream_null_variable
 };
 
 
@@ -236,7 +236,7 @@ ngx_stream_geoip_addr(ngx_stream_session_t *s, ngx_stream_geoip_conf_t *gcf)
         if (IN6_IS_ADDR_V4MAPPED(inaddr6)) {
             p = inaddr6->s6_addr;
 
-            inaddr = p[12] << 24;
+            inaddr = (in_addr_t) p[12] << 24;
             inaddr += p[13] << 16;
             inaddr += p[14] << 8;
             inaddr += p[15];

@@ -9,16 +9,6 @@
 #include <ngx_core.h>
 
 
-/*
- * Solaris has thread-safe crypt()
- * Linux has crypt_r(); "struct crypt_data" is more than 128K
- * FreeBSD needs the mutex to protect crypt()
- *
- * TODO:
- *     ngx_crypt_init() to init mutex
- */
-
-
 #if (NGX_CRYPT)
 
 #if (NGX_HAVE_GNU_CRYPT_R)
@@ -31,10 +21,6 @@ ngx_libc_crypt(ngx_pool_t *pool, u_char *key, u_char *salt, u_char **encrypted)
     struct crypt_data   cd;
 
     cd.initialized = 0;
-#ifdef __GLIBC__
-    /* work around the glibc bug */
-    cd.current_salt[0] = ~salt[0];
-#endif
 
     value = crypt_r((char *) key, (char *) salt, &cd);
 
@@ -55,7 +41,7 @@ ngx_libc_crypt(ngx_pool_t *pool, u_char *key, u_char *salt, u_char **encrypted)
     return NGX_ERROR;
 }
 
-#else
+#elif (NGX_HAVE_CRYPT)
 
 ngx_int_t
 ngx_libc_crypt(ngx_pool_t *pool, u_char *key, u_char *salt, u_char **encrypted)
@@ -82,6 +68,14 @@ ngx_libc_crypt(ngx_pool_t *pool, u_char *key, u_char *salt, u_char **encrypted)
 
     ngx_log_error(NGX_LOG_CRIT, pool->log, err, "crypt() failed");
 
+    return NGX_ERROR;
+}
+
+#else
+
+ngx_int_t
+ngx_libc_crypt(ngx_pool_t *pool, u_char *key, u_char *salt, u_char **encrypted)
+{
     return NGX_ERROR;
 }
 
